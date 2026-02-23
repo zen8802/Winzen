@@ -1,0 +1,6 @@
+export const CREATOR_DEPOSIT = 100;
+export const REFUND_MIN_PARTICIPANTS = 10;
+export const REFUND_MIN_VOLUME = 500;
+export const CREATOR_REWARD_PER_PARTICIPANT = 5;
+export const CREATOR_REWARD_PER_VOLUME = 0.02;
+export const CREATOR_REWARD_CAP = 1000;

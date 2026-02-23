@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0c0f14;
+  --surface: #151a23;
+  --border: #252d3a;
+  --text: #e6edf5;
+  --muted: #8b9cb3;
+  --accent: #22c55e;
+  --accent-dim: #16a34a;
+  --coin: #eab308;
+  --logo: #d946ef;
+  --logo-dim: #c026d3;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+@layer components {
+  .logo-gradient {
+    background: linear-gradient(135deg, #f472b6 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .logo-gradient-bg {
+    background: linear-gradient(135deg, rgba(244, 114, 182, 0.18) 0%, rgba(167, 139, 250, 0.18) 100%);
+  }
+
+  .card {
+    @apply rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition;
+  }
+  .card:hover {
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .btn-primary {
+    @apply rounded-lg bg-[var(--accent)] px-4 py-2 font-medium text-white transition hover:bg-[var(--accent-dim)];
+  }
+  .btn-ghost {
+    @apply rounded-lg px-4 py-2 font-medium text-[var(--muted)] transition hover:bg-white/5 hover:text-[var(--text)];
+  }
+}
