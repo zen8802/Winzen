@@ -15,8 +15,14 @@ const TABS = [
 export function Subheader() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  // Only show on homepage and /markets listing (not on individual market pages, portfolio, etc.)
+  const isHomepage = pathname === "/";
+  const isMarketsListing = pathname === "/markets";
+  if (!isHomepage && !isMarketsListing) return null;
+
   const currentTab = searchParams.get("tab") || "trending";
-  const basePath = pathname.startsWith("/markets") ? "/markets" : "/";
+  const basePath = isMarketsListing ? "/markets" : "/";
 
   return (
     <nav className="border-b border-[var(--border)] bg-[var(--bg)]/80">

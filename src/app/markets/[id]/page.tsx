@@ -5,6 +5,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { PlaceBetForm } from "./PlaceBetForm";
 import { ResolveForm } from "./ResolveForm";
+import { ProbabilityChart } from "@/components/ProbabilityChart";
+import { getMarketSnapshots, getUserBetPosition } from "@/app/actions/charts";
 import Link from "next/link";
 
 async function getMarket(id: string) {
@@ -42,6 +44,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
   const resolved = !!market.resolvedOutcomeId;
   const isCreator = session?.user?.id === market.createdById;
   const canResolve = isCreator && !resolved && new Date() >= market.closesAt;
+  const marketClosed = resolved || new Date() >= market.closesAt;
 
   let existingOutcomeId: string | null = null;
   if (session?.user?.id) {
@@ -49,6 +52,11 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
     const outcomeIds = [...new Set(myBets.map((b) => b.outcomeId))];
     if (outcomeIds.length === 1) existingOutcomeId = outcomeIds[0];
   }
+
+  const [initialSnapshots, userPosition] = await Promise.all([
+    getMarketSnapshots(id),
+    session?.user?.id ? getUserBetPosition(id, session.user.id) : Promise.resolve(null),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -88,6 +96,17 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
             })}
           </div>
           <p className="text-xs text-[var(--muted)]">Total pool: {total} coins</p>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm font-medium text-[var(--muted)]">Probability over time</p>
+          <ProbabilityChart
+            marketId={market.id}
+            outcomes={market.outcomes}
+            initialSnapshots={initialSnapshots}
+            userPosition={userPosition}
+            marketClosed={marketClosed}
+          />
         </div>
 
         {session?.user && !resolved && new Date() < market.closesAt && (

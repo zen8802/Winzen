@@ -20,6 +20,7 @@ import {
   getLevelFromXp,
   NEAR_MISS_THRESHOLD,
 } from "@/lib/gamification";
+import { computeProbabilities } from "@/lib/probability";
 
 const createMarketSchema = z.object({
   title: z.string().min(1).max(200),
@@ -93,6 +94,18 @@ export async function createMarket(formData: FormData) {
         balanceAfter: newBalance,
         referenceId: m.id,
       },
+    });
+
+    // ─── Initial probability snapshot ─────────────────────────────────────────
+    const snapshotNow = new Date();
+    const initialProbs = computeProbabilities(m.outcomes, new Map());
+    await tx.probabilitySnapshot.createMany({
+      data: m.outcomes.map((o) => ({
+        marketId: m.id,
+        outcomeId: o.id,
+        probability: initialProbs.get(o.id)!,
+        recordedAt: snapshotNow,
+      })),
     });
 
     // Handle create_market mission progress

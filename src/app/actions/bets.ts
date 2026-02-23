@@ -12,6 +12,7 @@ import {
   getLevelFromXp,
   isTrendingMarket,
 } from "@/lib/gamification";
+import { computeProbabilities } from "@/lib/probability";
 
 const placeBetSchema = z.object({
   marketId: z.string(),
@@ -33,7 +34,7 @@ export async function placeBet(formData: FormData) {
 
   const { marketId, outcomeId, amount } = parsed.data;
 
-  const [user, market, existingBets] = await Promise.all([
+  const [user, market, existingBets, currentBetTotals] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { balance: true, winStreak: true, xp: true, level: true },
@@ -45,6 +46,11 @@ export async function placeBet(formData: FormData) {
     prisma.bet.findMany({
       where: { userId: session.user.id, marketId },
       select: { outcomeId: true },
+    }),
+    prisma.bet.groupBy({
+      by: ["outcomeId"],
+      where: { marketId },
+      _sum: { amount: true },
     }),
   ]);
 
@@ -65,6 +71,17 @@ export async function placeBet(formData: FormData) {
 
   const newBalance = user.balance - amount;
   const isNewParticipant = existingBets.length === 0;
+
+  // ─── Probability snapshot (post-bet state) ────────────────────────────────
+  const poolByOutcome = new Map<string, number>();
+  for (const row of currentBetTotals) {
+    poolByOutcome.set(row.outcomeId, row._sum.amount ?? 0);
+  }
+  const simulatedPool = new Map(poolByOutcome);
+  simulatedPool.set(outcomeId, (simulatedPool.get(outcomeId) ?? 0) + amount);
+  const postBetProbs = computeProbabilities(market.outcomes, simulatedPool);
+  const entryProbability = postBetProbs.get(outcomeId)!;
+  const snapshotNow = new Date();
 
   // ─── XP ───────────────────────────────────────────────────────────────────
   const xpGained = getXpForAction("place_bet");
@@ -87,14 +104,17 @@ export async function placeBet(formData: FormData) {
       : [];
   const progressMap = new Map(existingProgress.map((p) => [p.missionKey, p]));
 
+  // Pre-compute mission outcomes
+  type MissionOutcome = {
+    key: string;
+    newProgress: number;
+    nowCompleted: boolean;
+    coinReward: number;
+    xpReward: number;
+  };
   let missionCoinRewards = 0;
   let missionXpGained = 0;
-
-  type UpsertOp = ReturnType<typeof prisma.userMissionProgress.upsert>;
-  type TxCreateOp = ReturnType<typeof prisma.transaction.create>;
-
-  const missionUpserts: UpsertOp[] = [];
-  const missionTxCreates: TxCreateOp[] = [];
+  const missionOutcomes: MissionOutcome[] = [];
 
   for (const mission of relevantMissions) {
     const existing = progressMap.get(mission.key);
@@ -103,73 +123,43 @@ export async function placeBet(formData: FormData) {
     const currentProgress = existing?.progress ?? 0;
     const newProgress = currentProgress + 1;
     const nowCompleted = newProgress >= mission.target;
-
-    missionUpserts.push(
-      prisma.userMissionProgress.upsert({
-        where: {
-          userId_missionKey_date: {
-            userId: session.user.id,
-            missionKey: mission.key,
-            date: today,
-          },
-        },
-        create: {
-          userId: session.user.id,
-          missionKey: mission.key,
-          date: today,
-          progress: newProgress,
-          completed: nowCompleted,
-          claimedAt: nowCompleted ? new Date() : null,
-        },
-        update: {
-          progress: newProgress,
-          completed: nowCompleted,
-          claimedAt: nowCompleted ? new Date() : undefined,
-        },
-      })
-    );
+    let coinReward = 0;
+    let xpReward = 0;
 
     if (nowCompleted) {
       const multiplier = getWinMultiplier(user.winStreak);
-      const coinReward = Math.floor(mission.reward * multiplier);
+      coinReward = Math.floor(mission.reward * multiplier);
+      xpReward = getXpForAction("complete_mission");
       missionCoinRewards += coinReward;
-      missionXpGained += getXpForAction("complete_mission");
-
-      if (coinReward > 0) {
-        missionTxCreates.push(
-          prisma.transaction.create({
-            data: {
-              userId: session.user.id,
-              type: "mission_reward",
-              amount: coinReward,
-              referenceId: mission.key,
-            },
-          })
-        );
-      }
+      missionXpGained += xpReward;
     }
+
+    missionOutcomes.push({ key: mission.key, newProgress, nowCompleted, coinReward, xpReward });
   }
 
   const finalBalance = newBalance + missionCoinRewards;
   const finalXp = user.xp + xpGained + missionXpGained;
   const finalLevel = getLevelFromXp(finalXp);
 
-  await prisma.$transaction([
-    prisma.user.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
       where: { id: session.user.id },
       data: { balance: finalBalance, xp: finalXp, level: finalLevel },
-    }),
-    prisma.bet.create({
-      data: { userId: session.user.id, marketId, outcomeId, amount },
-    }),
-    prisma.market.update({
+    });
+
+    await tx.bet.create({
+      data: { userId: session.user.id, marketId, outcomeId, amount, entryProbability },
+    });
+
+    await tx.market.update({
       where: { id: marketId },
       data: {
         totalVolume: { increment: amount },
         ...(isNewParticipant ? { participantCount: { increment: 1 } } : {}),
       },
-    }),
-    prisma.transaction.create({
+    });
+
+    await tx.transaction.create({
       data: {
         userId: session.user.id,
         type: "bet",
@@ -177,10 +167,55 @@ export async function placeBet(formData: FormData) {
         balanceAfter: newBalance,
         referenceId: marketId,
       },
-    }),
-    ...missionUpserts,
-    ...missionTxCreates,
-  ]);
+    });
+
+    // Mission upserts
+    for (const mo of missionOutcomes) {
+      await tx.userMissionProgress.upsert({
+        where: {
+          userId_missionKey_date: {
+            userId: session.user.id,
+            missionKey: mo.key,
+            date: today,
+          },
+        },
+        create: {
+          userId: session.user.id,
+          missionKey: mo.key,
+          date: today,
+          progress: mo.newProgress,
+          completed: mo.nowCompleted,
+          claimedAt: mo.nowCompleted ? new Date() : null,
+        },
+        update: {
+          progress: mo.newProgress,
+          completed: mo.nowCompleted,
+          claimedAt: mo.nowCompleted ? new Date() : undefined,
+        },
+      });
+
+      if (mo.nowCompleted && mo.coinReward > 0) {
+        await tx.transaction.create({
+          data: {
+            userId: session.user.id,
+            type: "mission_reward",
+            amount: mo.coinReward,
+            referenceId: mo.key,
+          },
+        });
+      }
+    }
+
+    // Probability snapshot
+    await tx.probabilitySnapshot.createMany({
+      data: market.outcomes.map((o) => ({
+        marketId,
+        outcomeId: o.id,
+        probability: postBetProbs.get(o.id)!,
+        recordedAt: snapshotNow,
+      })),
+    });
+  });
 
   revalidatePath("/");
   revalidatePath("/markets");

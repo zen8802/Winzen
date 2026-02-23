@@ -100,9 +100,10 @@ model Market {
   createdAt          DateTime  @default(now())
   createdById        String
 
-  createdBy User      @relation("CreatedBy", fields: [createdById], references: [id])
-  outcomes  Outcome[]
-  bets      Bet[]
+  createdBy            User                  @relation("CreatedBy", fields: [createdById], references: [id])
+  outcomes             Outcome[]
+  bets                 Bet[]
+  probabilitySnapshots ProbabilitySnapshot[]
 
   @@index([closesAt])
   @@index([createdById])
@@ -115,19 +116,21 @@ model Outcome {
   label     String   // "Yes", "No", or "Option A", etc.
   order     Int      @default(0)
 
-  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  bets   Bet[]
+  market               Market                @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  bets                 Bet[]
+  probabilitySnapshots ProbabilitySnapshot[]
 
   @@unique([marketId, label])
   @@index([marketId])
 }
 
 model Bet {
-  id        String   @id @default(cuid())
-  userId    String
-  marketId  String
-  outcomeId String
-  amount    Int      // coins staked
+  id               String   @id @default(cuid())
+  userId           String
+  marketId         String
+  outcomeId        String
+  amount           Int      // coins staked
+  entryProbability Float?   // probability of chosen outcome at time of bet (0.0–1.0)
 
   createdAt DateTime @default(now())
 
@@ -137,6 +140,19 @@ model Bet {
 
   @@index([userId])
   @@index([marketId])
+}
+
+model ProbabilitySnapshot {
+  id          String   @id @default(cuid())
+  marketId    String
+  outcomeId   String
+  probability Float    // 0.01–0.99
+  recordedAt  DateTime // shared timestamp for all outcomes in one bet batch
+
+  market  Market  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  outcome Outcome @relation(fields: [outcomeId], references: [id], onDelete: Cascade)
+
+  @@index([marketId, recordedAt])
 }
 
 model Transaction {
