@@ -30,21 +30,30 @@ export async function POST(req: Request) {
 
   const { market_id: marketId, winning_side: winningSide } = parsed.data;
 
+  // Re-fetch role from DB — never trust JWT alone for authorization
+  const actor = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
+  });
+  const isAdmin = actor?.role === "admin";
+
   const market = await prisma.market.findFirst({
-    where: { id: marketId, createdById: session.user.id },
+    where: {
+      id: marketId,
+      // Admins can resolve any market; creators can only resolve their own
+      ...(isAdmin ? {} : { createdById: session.user.id }),
+    },
     include: { outcomes: true, bets: true, createdBy: true },
   });
 
   if (!market) {
-    return NextResponse.json(
-      { error: "Market not found or you are not the creator" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Market not found or access denied" }, { status: 404 });
   }
   if (market.resolvedOutcomeId) {
     return NextResponse.json({ error: "Market already resolved" }, { status: 400 });
   }
-  if (new Date() < market.closesAt) {
+  // Admins can force-resolve before close date; creators cannot
+  if (!isAdmin && new Date() < market.closesAt) {
     return NextResponse.json({ error: "Market has not closed yet" }, { status: 400 });
   }
 

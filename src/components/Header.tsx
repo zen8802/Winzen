@@ -51,6 +51,11 @@ export function Header() {
               <Link href="/markets/new" className="btn-ghost text-sm">
                 Create
               </Link>
+              {session?.user?.role === "admin" && (
+                <Link href="/admin" className="btn-ghost text-sm logo-gradient">
+                  Admin
+                </Link>
+              )}
               <Link href="/api/auth/signout" className="btn-ghost text-sm">
                 Sign out
               </Link>

@@ -6,11 +6,14 @@ import Link from "next/link";
 import { formatCoins } from "@/lib/coins";
 import { XPBar } from "@/components/XPBar";
 import { getLevelFromXp, getTitle, xpForLevel, xpForPrevLevel } from "@/lib/gamification";
+import { getPortfolioSnapshots } from "@/app/actions/portfolio";
+import { PortfolioPnlChart } from "@/components/PortfolioPnlChart";
 
 const TX_LABELS: Record<string, string> = {
   initial: "Welcome bonus",
   bet: "Bet placed",
   win: "Bet won",
+  cashout: "Cashed out",
   refund: "Refund",
   purchase: "Item purchased",
   deposit: "Market deposit",
@@ -22,15 +25,42 @@ const TX_LABELS: Record<string, string> = {
 };
 
 async function getPortfolio(userId: string) {
-  const [user, bets, transactions] = await Promise.all([
+  const [user, activeBets, closedBets, transactions, snapshots] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { balance: true, email: true, name: true, loginStreak: true, winStreak: true, xp: true, level: true },
+      select: {
+        balance: true,
+        email: true,
+        name: true,
+        loginStreak: true,
+        winStreak: true,
+        xp: true,
+        level: true,
+        eloRating: true,
+      },
     }),
+    // Open positions (not cashed out, market not resolved)
     prisma.bet.findMany({
-      where: { userId },
+      where: { userId, closedAt: null },
       orderBy: { createdAt: "desc" },
-      take: 30,
+      take: 50,
+      include: {
+        market: {
+          select: {
+            id: true,
+            title: true,
+            resolvedOutcomeId: true,
+            currentProbability: true,
+          },
+        },
+        outcome: { select: { label: true } },
+      },
+    }),
+    // Closed positions (cashed out or market resolved)
+    prisma.bet.findMany({
+      where: { userId, closedAt: { not: null } },
+      orderBy: { closedAt: "desc" },
+      take: 20,
       include: {
         market: { select: { id: true, title: true, resolvedOutcomeId: true } },
         outcome: { select: { label: true } },
@@ -41,21 +71,46 @@ async function getPortfolio(userId: string) {
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
+    getPortfolioSnapshots(userId, "all"),
   ]);
-  return { user, bets, transactions };
+  return { user, activeBets, closedBets, transactions, snapshots };
 }
 
 export default async function PortfolioPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const { user, bets, transactions } = await getPortfolio(session.user.id);
+  const { user, activeBets, closedBets, transactions, snapshots } = await getPortfolio(
+    session.user.id,
+  );
   if (!user) redirect("/login");
 
   const level = getLevelFromXp(user.xp);
   const title = getTitle(level);
   const currentLevelXp = xpForPrevLevel(level);
   const nextLevelXp = xpForLevel(level);
+
+  // Separate active (market open) vs pending settlement (market resolved, bet won)
+  const openPositions = activeBets.filter((b) => !b.market.resolvedOutcomeId);
+  const pendingPositions = activeBets.filter((b) => !!b.market.resolvedOutcomeId);
+
+  // Compute unrealized PnL for open positions
+  const unrealizedPnl = openPositions.reduce((sum, bet) => {
+    const isYes = bet.outcome.label.toLowerCase().startsWith("yes");
+    const currentProb = isYes
+      ? bet.market.currentProbability
+      : 100 - bet.market.currentProbability;
+    const shares = bet.shares ?? bet.amount / 50;
+    return sum + (shares * currentProb - bet.amount);
+  }, 0);
+
+  // Realized PnL: sum of (cashout payout - amount) for closed bets
+  const realizedPnl = closedBets.reduce((sum, bet) => {
+    if (!bet.exitProbability) return sum;
+    const shares = bet.shares ?? bet.amount / 50;
+    const cashoutValue = shares * bet.exitProbability;
+    return sum + (cashoutValue - bet.amount);
+  }, 0);
 
   return (
     <div className="space-y-8">
@@ -69,12 +124,192 @@ export default async function PortfolioPage() {
         nextLevelXp={nextLevelXp}
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* Stats row */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <section className="card">
           <p className="text-sm text-[var(--muted)]">Balance</p>
           <p className="text-3xl font-mono text-[var(--coin)]">{formatCoins(user.balance)}</p>
         </section>
 
+        <section className="card">
+          <p className="text-sm text-[var(--muted)]">ELO Rating</p>
+          <p className="text-3xl font-mono text-[var(--accent)]">{user.eloRating}</p>
+        </section>
+
+        <section className="card">
+          <p className="text-sm text-[var(--muted)]">Unrealized PnL</p>
+          <p
+            className="text-3xl font-mono"
+            style={{ color: unrealizedPnl >= 0 ? "#22c55e" : "#f97316" }}
+          >
+            {unrealizedPnl >= 0 ? "+" : ""}
+            {Math.round(unrealizedPnl)}
+          </p>
+        </section>
+
+        <section className="card">
+          <p className="text-sm text-[var(--muted)]">Realized PnL</p>
+          <p
+            className="text-3xl font-mono"
+            style={{ color: realizedPnl >= 0 ? "#22c55e" : "#f97316" }}
+          >
+            {realizedPnl >= 0 ? "+" : ""}
+            {Math.round(realizedPnl)}
+          </p>
+        </section>
+      </div>
+
+      {/* PnL Chart */}
+      {snapshots.length > 1 && (
+        <section className="card">
+          <h2 className="mb-4 text-lg font-semibold">Portfolio Value</h2>
+          <PortfolioPnlChart snapshots={snapshots} />
+        </section>
+      )}
+
+      {/* Open Positions */}
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Open Positions</h2>
+        <ul className="space-y-2">
+          {openPositions.map((bet) => {
+            const isYes = bet.outcome.label.toLowerCase().startsWith("yes");
+            const currentProb = isYes
+              ? bet.market.currentProbability
+              : 100 - bet.market.currentProbability;
+            const shares = bet.shares ?? bet.amount / 50;
+            const entryProb = bet.entryProbability ?? 50;
+            const currentValue = shares * currentProb;
+            const pnl = currentValue - bet.amount;
+            return (
+              <li
+                key={bet.id}
+                className="card flex items-center justify-between gap-4"
+              >
+                <div>
+                  <Link
+                    href={`/markets/${bet.market.id}`}
+                    className="font-medium text-[var(--text)] hover:text-[var(--accent)]"
+                  >
+                    {bet.market.title}
+                  </Link>
+                  <p className="mt-0.5 text-sm text-[var(--muted)]">
+                    <span
+                      className="font-semibold"
+                      style={{ color: isYes ? "#22c55e" : "#f97316" }}
+                    >
+                      {bet.outcome.label}
+                    </span>{" "}
+                    · Entry: {entryProb.toFixed(1)}% → Now: {currentProb.toFixed(1)}% ·{" "}
+                    {shares.toFixed(3)} shares
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p
+                    className="font-mono text-sm font-bold"
+                    style={{ color: pnl >= 0 ? "#22c55e" : "#f97316" }}
+                  >
+                    {pnl >= 0 ? "+" : ""}
+                    {pnl.toFixed(0)}
+                  </p>
+                  <p className="text-xs text-[var(--muted)]">{bet.amount} spent</p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {openPositions.length === 0 && (
+          <p className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-[var(--muted)]">
+            No open positions.{" "}
+            <Link href="/markets" className="text-[var(--accent)] hover:underline">
+              Browse markets
+            </Link>
+            .
+          </p>
+        )}
+      </section>
+
+      {/* Pending Settlement */}
+      {pendingPositions.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">Pending Settlement</h2>
+          <ul className="space-y-2">
+            {pendingPositions.map((bet) => {
+              const won = bet.market.resolvedOutcomeId === bet.outcomeId;
+              const shares = bet.shares ?? bet.amount / 50;
+              const payout = won ? Math.floor(shares * 100) : 0;
+              return (
+                <li key={bet.id} className="card flex items-center justify-between gap-4">
+                  <div>
+                    <Link
+                      href={`/markets/${bet.market.id}`}
+                      className="font-medium text-[var(--text)] hover:text-[var(--accent)]"
+                    >
+                      {bet.market.title}
+                    </Link>
+                    <p className="text-sm text-[var(--muted)]">
+                      {bet.outcome.label} · {bet.amount} coins
+                    </p>
+                  </div>
+                  <span
+                    className="text-sm font-bold"
+                    style={{ color: won ? "#22c55e" : "#f97316" }}
+                  >
+                    {won ? `Won · +${payout} coins` : "Lost"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* Closed Positions */}
+      {closedBets.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">Closed Positions</h2>
+          <ul className="space-y-2">
+            {closedBets.map((bet) => {
+              const shares = bet.shares ?? bet.amount / 50;
+              const exitProb = bet.exitProbability ?? 0;
+              const payout = Math.floor(shares * exitProb);
+              const pnl = payout - bet.amount;
+              const isYes = bet.outcome.label.toLowerCase().startsWith("yes");
+              return (
+                <li key={bet.id} className="card flex items-center justify-between gap-4">
+                  <div>
+                    <Link
+                      href={`/markets/${bet.market.id}`}
+                      className="font-medium text-[var(--text)] hover:text-[var(--accent)]"
+                    >
+                      {bet.market.title}
+                    </Link>
+                    <p className="text-sm text-[var(--muted)]">
+                      <span style={{ color: isYes ? "#22c55e" : "#f97316" }}>
+                        {bet.outcome.label}
+                      </span>{" "}
+                      · Entry {(bet.entryProbability ?? 50).toFixed(1)}% → Exit{" "}
+                      {exitProb.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p
+                      className="font-mono text-sm font-bold"
+                      style={{ color: pnl >= 0 ? "#22c55e" : "#f97316" }}
+                    >
+                      {pnl >= 0 ? "+" : ""}
+                      {pnl} coins
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">Cashed out</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* Streaks */}
+      <div className="grid gap-3 sm:grid-cols-2">
         <section className="card flex items-center gap-3">
           <span className="text-2xl">🔥</span>
           <div>
@@ -82,7 +317,6 @@ export default async function PortfolioPage() {
             <p className="text-xl font-bold text-[var(--text)]">{user.loginStreak} days</p>
           </div>
         </section>
-
         <section className="card flex items-center gap-3">
           <span className="text-2xl">⚡</span>
           <div>
@@ -92,43 +326,7 @@ export default async function PortfolioPage() {
         </section>
       </div>
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Your bets</h2>
-        <ul className="space-y-2">
-          {bets.map((bet) => (
-            <li key={bet.id} className="card flex items-center justify-between gap-4">
-              <div>
-                <Link
-                  href={`/markets/${bet.market.id}`}
-                  className="font-medium text-[var(--text)] hover:text-[var(--accent)]"
-                >
-                  {bet.market.title}
-                </Link>
-                <p className="text-sm text-[var(--muted)]">
-                  {bet.outcome.label} · {bet.amount} coins
-                </p>
-              </div>
-              <span className="text-xs text-[var(--muted)]">
-                {bet.market.resolvedOutcomeId
-                  ? bet.outcomeId === bet.market.resolvedOutcomeId
-                    ? "Won"
-                    : "Lost"
-                  : "Pending"}
-              </span>
-            </li>
-          ))}
-        </ul>
-        {bets.length === 0 && (
-          <p className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center text-[var(--muted)]">
-            No bets yet.{" "}
-            <Link href="/markets" className="text-[var(--accent)] hover:underline">
-              Browse markets
-            </Link>
-            .
-          </p>
-        )}
-      </section>
-
+      {/* Transactions */}
       <section>
         <h2 className="mb-3 text-lg font-semibold">Recent transactions</h2>
         <ul className="space-y-2">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getOutcomeColors } from "@/lib/outcome-colors";
+import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { StreakBanner } from "@/components/StreakBanner";
 import { DailyMissions } from "@/components/DailyMissions";
 
@@ -9,7 +10,7 @@ const VALID_TABS = ["trending", "sports", "politics", "culture", "crypto", "tech
 async function getMarkets(tab: string | null) {
   const baseQuery = {
     include: {
-      outcomes: { orderBy: { order: "asc" } },
+      outcomes: { orderBy: { order: "asc" as const } },
       bets: true,
       createdBy: { select: { name: true } },
     },
@@ -90,10 +91,14 @@ export default async function HomePage({
             return (
               <li key={market.id}>
                 <Link href={`/markets/${market.id}`} className="card block">
-                  <div className="mb-1 flex items-center gap-2">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
                     <span className="rounded bg-[var(--logo)]/20 px-2 py-0.5 text-xs font-medium capitalize text-[var(--logo)]">
                       {market.category}
                     </span>
+                    <MarketStatusBadge
+                      closesAt={market.closesAt}
+                      resolvedOutcomeId={market.resolvedOutcomeId}
+                    />
                   </div>
                   <p className="font-medium text-[var(--text)]">{market.title}</p>
                   <div className="mt-2 flex flex-wrap gap-2">

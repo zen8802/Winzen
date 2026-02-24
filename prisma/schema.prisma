@@ -18,15 +18,19 @@ model User {
   winStreak     Int       @default(0)
   xp            Int       @default(0)
   level         Int       @default(1)
+  eloRating     Int       @default(1000)
+  role          String    @default("user") // "user" | "admin"
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  marketsCreated  Market[]              @relation("CreatedBy")
-  bets            Bet[]
-  transactions    Transaction[]
-  agent           UserAgent?
-  purchases       AgentPurchase[]
-  missionProgress UserMissionProgress[]
+  marketsCreated     Market[]              @relation("CreatedBy")
+  bets               Bet[]
+  transactions       Transaction[]
+  agent              UserAgent?
+  purchases          AgentPurchase[]
+  missionProgress    UserMissionProgress[]
+  portfolioSnapshots PortfolioSnapshot[]
+  comments           Comment[]
 }
 
 model UserMissionProgress {
@@ -96,6 +100,8 @@ model Market {
   totalVolume        Int       @default(0) // sum of all bet amounts
   participantCount   Int       @default(0) // unique users who placed at least one bet
   resolvedOutcomeId  String?   // set when market is resolved
+  currentProbability Float     @default(50) // 1–99, probability of YES outcome (AMM price)
+  liquidity          Int       @default(100000) // AMM liquidity parameter
   closesAt           DateTime
   createdAt          DateTime  @default(now())
   createdById        String
@@ -104,6 +110,7 @@ model Market {
   outcomes             Outcome[]
   bets                 Bet[]
   probabilitySnapshots ProbabilitySnapshot[]
+  comments             Comment[]
 
   @@index([closesAt])
   @@index([createdById])
@@ -125,12 +132,15 @@ model Outcome {
 }
 
 model Bet {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   userId           String
   marketId         String
   outcomeId        String
-  amount           Int      // coins staked
-  entryProbability Float?   // probability of chosen outcome at time of bet (0.0–1.0)
+  amount           Int       // coins staked
+  entryProbability Float?    // probability of CHOSEN outcome at time of bet (1–99 scale)
+  shares           Float?    // amount / entryProbability
+  closedAt         DateTime? // set on cash-out (early exit)
+  exitProbability  Float?    // probability of chosen outcome at cash-out (1–99 scale)
 
   createdAt DateTime @default(now())
 
@@ -155,17 +165,42 @@ model ProbabilitySnapshot {
   @@index([marketId, recordedAt])
 }
 
+model PortfolioSnapshot {
+  id         String   @id @default(cuid())
+  userId     String
+  totalValue Int      // balance + unrealized value of all open positions at snapshot time
+  date       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
+
 model Transaction {
-  id          String   @id @default(cuid())
-  userId      String
-  type        String   // "initial" | "bet" | "win" | "refund" | "purchase" | "deposit" | "deposit_refund" | "creator_reward"
-  amount      Int      // positive = credit, negative = debit (for bet)
-  balanceAfter Int?    // snapshot after tx
-  referenceId String?  // bet id or market id
+  id           String   @id @default(cuid())
+  userId       String
+  type         String   // "initial" | "bet" | "win" | "cashout" | "refund" | "purchase" | "deposit" | "deposit_refund" | "creator_reward"
+  amount       Int      // positive = credit, negative = debit (for bet)
+  balanceAfter Int?     // snapshot after tx
+  referenceId  String?  // bet id or market id
 
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  marketId  String
+  userId    String
+  username  String   // denormalized — user's display name at time of posting
+  content   String   // max 300 chars enforced in application layer
+  createdAt DateTime @default(now())
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([marketId, createdAt])
 }

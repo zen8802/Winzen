@@ -24,6 +24,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name ?? undefined,
           streakReward: streakResult.reward,
           loginStreak: streakResult.newStreak,
+          role: user.role, // "user" | "admin"
         };
       },
     }),
@@ -35,6 +36,7 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email;
         token.streakReward = (user as { streakReward?: number }).streakReward ?? 0;
         token.loginStreak = (user as { loginStreak?: number }).loginStreak ?? 0;
+        token.role = (user as { role?: string }).role ?? "user";
       }
       return token;
     },
@@ -43,6 +45,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.streakReward = (token.streakReward as number) ?? 0;
         session.user.loginStreak = (token.loginStreak as number) ?? 0;
+        session.user.role = (token.role as string) ?? "user";
       }
       return session;
     },
@@ -57,6 +60,7 @@ declare module "next-auth" {
       name?: string | null;
       streakReward: number;
       loginStreak: number;
+      role: string; // "user" | "admin"
     };
   }
 }
@@ -66,5 +70,6 @@ declare module "next-auth/jwt" {
     id?: string;
     streakReward?: number;
     loginStreak?: number;
+    role?: string;
   }
 }

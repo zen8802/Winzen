@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Insufficient balance" }, { status: 400 });
   }
 
-  const betOutcomes = [...new Set(existingBets.map((b) => b.outcomeId))];
+  const betOutcomes = Array.from(new Set(existingBets.map((b) => b.outcomeId)));
   if (betOutcomes.length > 0 && !betOutcomes.includes(outcomeId)) {
     const existingOutcome = market.outcomes.find((o) => o.id === betOutcomes[0]);
     return NextResponse.json(

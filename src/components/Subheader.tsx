@@ -40,7 +40,7 @@ export function Subheader() {
                   : "text-[var(--muted)] hover:bg-white/5 hover:text-[var(--text)]"
               }`}
             >
-              {tab.emoji && <span className="mr-1">{tab.emoji}</span>}
+              {"emoji" in tab && tab.emoji && <span className="mr-1">{tab.emoji}</span>}
               {tab.label}
             </Link>
           );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { getGamificationData } from "@/app/actions/user";
 import { RewardReveal } from "./RewardReveal";
@@ -18,47 +18,40 @@ export function DailyMissions() {
   const { status } = useSession();
   const [missions, setMissions] = useState<Mission[]>([]);
   const [justCompleted, setJustCompleted] = useState<string | null>(null);
-  const [prevCompleted, setPrevCompleted] = useState<Set<string>>(new Set());
+  // Track previously-completed keys in a ref to avoid restarting effects
+  const prevCompletedRef = useRef<Set<string>>(new Set());
 
+  const fetchMissions = useCallback(async () => {
+    const d = await getGamificationData();
+    if (!d) return;
+    const newMissions = d.dailyMissions;
+
+    // Detect newly completed missions without nested setState
+    for (const m of newMissions) {
+      if (m.completed && !prevCompletedRef.current.has(m.key)) {
+        setJustCompleted(m.key);
+        break; // show one animation at a time
+      }
+    }
+    prevCompletedRef.current = new Set(
+      newMissions.filter((m) => m.completed).map((m) => m.key)
+    );
+    setMissions(newMissions);
+  }, []);
+
+  // Fetch once on mount
   useEffect(() => {
     if (status !== "authenticated") return;
+    fetchMissions();
+  }, [status, fetchMissions]);
 
-    getGamificationData().then((d) => {
-      if (!d) return;
-      const newMissions = d.dailyMissions;
-
-      // Detect newly completed missions to show animation
-      setMissions((prev) => {
-        const prevKeys = new Set(prev.filter((m) => m.completed).map((m) => m.key));
-        setPrevCompleted(prevKeys);
-        return newMissions;
-      });
-
-      setMissions(newMissions);
-    });
-  }, [status]);
-
-  // Poll for updates after actions (missions can complete asynchronously)
+  // Refresh after any action that could complete a mission (bet, reward, etc.)
   useEffect(() => {
     if (status !== "authenticated") return;
-    const interval = setInterval(() => {
-      getGamificationData().then((d) => {
-        if (!d) return;
-        const newMissions = d.dailyMissions;
-
-        setMissions((prev) => {
-          for (const m of newMissions) {
-            const old = prev.find((p) => p.key === m.key);
-            if (m.completed && old && !old.completed) {
-              setJustCompleted(m.key);
-            }
-          }
-          return newMissions;
-        });
-      });
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [status, prevCompleted]);
+    const handler = () => fetchMissions();
+    window.addEventListener("balance-updated", handler);
+    return () => window.removeEventListener("balance-updated", handler);
+  }, [status, fetchMissions]);
 
   if (status !== "authenticated" || missions.length === 0) return null;
 

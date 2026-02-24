@@ -21,6 +21,7 @@ import {
   NEAR_MISS_THRESHOLD,
 } from "@/lib/gamification";
 import { computeProbabilities } from "@/lib/probability";
+import { computeEloUpdate } from "@/lib/elo";
 
 const createMarketSchema = z.object({
   title: z.string().min(1).max(200),
@@ -198,20 +199,36 @@ export async function resolveMarket(formData: FormData) {
 
   const { marketId, outcomeId } = parsed.data;
 
+  // Fetch role fresh from DB — never trust JWT alone for authorization
+  const actor = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
+  });
+  const isAdmin = actor?.role === "admin";
+
   const market = await prisma.market.findFirst({
-    where: { id: marketId, createdById: session.user.id },
-    include: { outcomes: true, bets: true, createdBy: true },
+    where: {
+      id: marketId,
+      // Admins can resolve any market; creators can only resolve their own
+      ...(isAdmin ? {} : { createdById: session.user.id }),
+    },
+    include: {
+      outcomes: true,
+      bets: { select: { id: true, userId: true, outcomeId: true, amount: true, shares: true, entryProbability: true, closedAt: true } },
+      createdBy: { select: { id: true, balance: true, eloRating: true } },
+    },
   });
 
-  if (!market) return { error: "Market not found or you are not the creator" };
+  if (!market) return { error: "Market not found or access denied" };
   if (market.resolvedOutcomeId) return { error: "Market already resolved" };
-  if (new Date() < market.closesAt) return { error: "Market has not closed yet" };
+  // Admins can force-resolve before the close date; creators cannot
+  if (!isAdmin && new Date() < market.closesAt) return { error: "Market has not closed yet" };
   if (!market.outcomes.some((o) => o.id === outcomeId)) return { error: "Invalid outcome" };
 
-  const winningBets = market.bets.filter((b) => b.outcomeId === outcomeId);
-  const losingBets = market.bets.filter((b) => b.outcomeId !== outcomeId);
-  const totalPool = market.bets.reduce((s, b) => s + b.amount, 0);
-  const winningPool = winningBets.reduce((s, b) => s + b.amount, 0);
+  const winningOutcome = market.outcomes.find((o) => o.id === outcomeId)!;
+
+  // Only process active (non-cashed-out) bets
+  const activeBets = market.bets.filter((b) => !b.closedAt);
 
   const totalVolume = market.totalVolume;
   const participantCount = market.participantCount;
@@ -223,309 +240,289 @@ export async function resolveMarket(formData: FormData) {
   const creatorReward = Math.min(
     CREATOR_REWARD_CAP,
     Math.floor(
-      participantCount * CREATOR_REWARD_PER_PARTICIPANT + totalVolume * CREATOR_REWARD_PER_VOLUME
-    )
+      participantCount * CREATOR_REWARD_PER_PARTICIPANT + totalVolume * CREATOR_REWARD_PER_VOLUME,
+    ),
   );
 
-  const creator = market.createdBy;
-  const creatorWinningBets = winningBets.filter((b) => b.userId === market.createdById);
-  const creatorPayout =
-    winningPool > 0 && creatorWinningBets.length > 0
-      ? Math.floor(
-          (creatorWinningBets.reduce((s, b) => s + b.amount, 0) / winningPool) * totalPool
-        )
-      : 0;
+  // ─── Build per-user summaries ──────────────────────────────────────────────
+  type BetRow = (typeof activeBets)[number];
+  type UserSummary = {
+    userId: string;
+    won: boolean; // has at least one winning bet
+    winningBets: BetRow[];
+    losingBets: BetRow[];
+  };
 
-  let creatorNewBalance = creator.balance + creatorPayout;
-  if (shouldRefundDeposit) creatorNewBalance += creatorDeposit;
-  if (creatorReward > 0) creatorNewBalance += creatorReward;
-
-  // ─── Gamification: collect all affected users ──────────────────────────────
-  const today = new Date().toISOString().slice(0, 10);
-  const dailyMissions = getDailyMissions(today);
-  const winBetsMission = dailyMissions.find((m) => m.type === "win_bets");
-
-  // Group bets by user
-  const winnerIds = new Set(winningBets.map((b) => b.userId));
-  const loserIds = new Set(losingBets.map((b) => b.userId));
-
-  // Per-outcome pool for near-miss detection
-  const poolByOutcome = new Map<string, number>();
-  for (const bet of market.bets) {
-    poolByOutcome.set(bet.outcomeId, (poolByOutcome.get(bet.outcomeId) ?? 0) + bet.amount);
+  const userSummaryMap = new Map<string, UserSummary>();
+  for (const bet of activeBets) {
+    const s = userSummaryMap.get(bet.userId) ?? {
+      userId: bet.userId,
+      won: false,
+      winningBets: [],
+      losingBets: [],
+    };
+    if (bet.outcomeId === outcomeId) {
+      s.won = true;
+      s.winningBets.push(bet);
+    } else {
+      s.losingBets.push(bet);
+    }
+    userSummaryMap.set(bet.userId, s);
   }
 
-  // Users whose outcome had ≥ NEAR_MISS_THRESHOLD share of the pool (but lost)
+  // ─── Near-miss detection ──────────────────────────────────────────────────
+  const poolByOutcome = new Map<string, number>();
+  for (const bet of activeBets) {
+    poolByOutcome.set(bet.outcomeId, (poolByOutcome.get(bet.outcomeId) ?? 0) + bet.amount);
+  }
+  const totalActiveAmount = activeBets.reduce((s, b) => s + b.amount, 0);
   const nearMissUserIds = new Set<string>();
-  if (totalPool > 0) {
+  if (totalActiveAmount > 0) {
     Array.from(poolByOutcome.entries()).forEach(([outId, pool]) => {
-      if (outId !== outcomeId && pool / totalPool >= NEAR_MISS_THRESHOLD) {
-        losingBets.filter((b) => b.outcomeId === outId).forEach((bet) => {
-          nearMissUserIds.add(bet.userId);
-        });
+      if (outId !== outcomeId && pool / totalActiveAmount >= NEAR_MISS_THRESHOLD) {
+        activeBets
+          .filter((b) => b.outcomeId === outId)
+          .forEach((bet) => nearMissUserIds.add(bet.userId));
       }
     });
   }
 
-  // Fetch all affected users' gamification data
-  const affectedUserIds = Array.from(new Set(Array.from(winnerIds).concat(Array.from(loserIds))));
+  // ─── Gamification setup ───────────────────────────────────────────────────
+  const today = new Date().toISOString().slice(0, 10);
+  const dailyMissions = getDailyMissions(today);
+  const winBetsMission = dailyMissions.find((m) => m.type === "win_bets");
+
+  const affectedUserIds = Array.from(userSummaryMap.keys());
   const affectedUsers = await prisma.user.findMany({
     where: { id: { in: affectedUserIds } },
-    select: { id: true, balance: true, winStreak: true, xp: true, level: true },
+    select: { id: true, balance: true, winStreak: true, xp: true, level: true, eloRating: true },
   });
   const userMap = new Map(affectedUsers.map((u) => [u.id, u]));
 
-  // Load win_bets mission progress for winners
-  const winnerIdsArr = Array.from(winnerIds);
+  const winnerIdsArr = Array.from(userSummaryMap.values())
+    .filter((s) => s.won)
+    .map((s) => s.userId);
   const existingWinProgress =
     winBetsMission && winnerIdsArr.length > 0
       ? await prisma.userMissionProgress.findMany({
-          where: {
-            userId: { in: winnerIdsArr },
-            missionKey: winBetsMission.key,
-            date: today,
-          },
+          where: { userId: { in: winnerIdsArr }, missionKey: winBetsMission.key, date: today },
         })
       : [];
   const winProgressMap = new Map(existingWinProgress.map((p) => [p.userId, p]));
 
-  // ─── Zero-pool case ────────────────────────────────────────────────────────
-  if (totalPool === 0) {
-    await prisma.$transaction([
-      prisma.market.update({
-        where: { id: marketId },
-        data: { resolvedOutcomeId: outcomeId },
-      }),
-      prisma.user.update({
-        where: { id: market.createdById },
-        data: { balance: creatorNewBalance },
-      }),
-      ...(shouldRefundDeposit
-        ? [
-            prisma.transaction.create({
-              data: {
-                userId: market.createdById,
-                type: "deposit_refund",
-                amount: creatorDeposit,
-                balanceAfter: creator.balance + creatorDeposit,
-                referenceId: marketId,
-              },
-            }),
-          ]
-        : []),
-      ...(creatorReward > 0
-        ? [
-            prisma.transaction.create({
-              data: {
-                userId: market.createdById,
-                type: "creator_reward",
-                amount: creatorReward,
-                balanceAfter: creatorNewBalance,
-                referenceId: marketId,
-              },
-            }),
-          ]
-        : []),
-    ]);
-    revalidatePath("/");
-    revalidatePath("/markets");
-    revalidatePath(`/markets/${marketId}`);
-    return { ok: true };
-  }
+  // ─── Mark market resolved ─────────────────────────────────────────────────
+  await prisma.market.update({
+    where: { id: marketId },
+    data: { resolvedOutcomeId: outcomeId },
+  });
 
-  // ─── Process each user sequentially (SQLite single-writer) ─────────────────
-  const creatorId = market.createdById;
-
-  for (const bet of winningBets) {
-    const payout = winningPool > 0 ? Math.floor((bet.amount / winningPool) * totalPool) : 0;
-    if (payout <= 0 && bet.userId !== creatorId) continue;
-
-    const betUser = userMap.get(bet.userId);
+  // ─── Process each user ───────────────────────────────────────────────────
+  for (const summary of Array.from(userSummaryMap.values())) {
+    const betUser = userMap.get(summary.userId);
     if (!betUser) continue;
 
-    const newWinStreak = betUser.winStreak + 1;
-    const xpGained = getXpForAction("win_bet");
-    let extraCoins = 0;
-    let extraXp = xpGained;
-    const ops = [];
+    // ── Compute ELO delta across all this user's active bets ──────────────
+    let eloDelta = 0;
+    let runningRating = betUser.eloRating;
+    for (const bet of [...summary.winningBets, ...summary.losingBets]) {
+      const betOutcome = market.outcomes.find((o) => o.id === bet.outcomeId);
+      const betIsYes = betOutcome?.label.toLowerCase().startsWith("yes") ?? true;
+      const betWon = bet.outcomeId === outcomeId;
+      // marketProbAtResolution = prob of CHOSEN outcome at market resolution
+      const marketProbAtRes = betWon
+        ? betIsYes
+          ? market.currentProbability
+          : 100 - market.currentProbability
+        : betIsYes
+          ? 100 - market.currentProbability
+          : market.currentProbability;
+      const entryProb = bet.entryProbability ?? 50;
+      const { delta } = computeEloUpdate(runningRating, entryProb, marketProbAtRes, betWon);
+      eloDelta += delta;
+      runningRating = Math.max(100, runningRating + delta);
+    }
+    const newEloRating = Math.max(100, betUser.eloRating + eloDelta);
 
-    // Win_bets mission
-    if (winBetsMission) {
-      const prog = winProgressMap.get(bet.userId);
-      if (!prog?.completed) {
-        const newProg = (prog?.progress ?? 0) + 1;
-        const nowCompleted = newProg >= winBetsMission.target;
-        ops.push(
-          prisma.userMissionProgress.upsert({
-            where: {
-              userId_missionKey_date: {
-                userId: bet.userId,
+    if (summary.won) {
+      // ── Winner processing ────────────────────────────────────────────────
+      const totalPayout = summary.winningBets.reduce(
+        (s: number, b: BetRow) => s + Math.floor((b.shares ?? b.amount / 50) * 100),
+        0,
+      );
+      const newWinStreak = betUser.winStreak + 1;
+      const xpGained = getXpForAction("win_bet");
+      let extraCoins = 0;
+      let extraXp = xpGained;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const missionOps: any[] = [];
+
+      if (winBetsMission) {
+        const prog = winProgressMap.get(summary.userId);
+        if (!prog?.completed) {
+          const newProg = (prog?.progress ?? 0) + 1;
+          const nowCompleted = newProg >= winBetsMission.target;
+          missionOps.push(
+            prisma.userMissionProgress.upsert({
+              where: {
+                userId_missionKey_date: {
+                  userId: summary.userId,
+                  missionKey: winBetsMission.key,
+                  date: today,
+                },
+              },
+              create: {
+                userId: summary.userId,
                 missionKey: winBetsMission.key,
                 date: today,
+                progress: newProg,
+                completed: nowCompleted,
+                claimedAt: nowCompleted ? new Date() : null,
               },
-            },
-            create: {
-              userId: bet.userId,
-              missionKey: winBetsMission.key,
-              date: today,
-              progress: newProg,
-              completed: nowCompleted,
-              claimedAt: nowCompleted ? new Date() : null,
-            },
-            update: {
-              progress: newProg,
-              completed: nowCompleted,
-              claimedAt: nowCompleted ? new Date() : undefined,
-            },
-          })
-        );
-        if (nowCompleted) {
-          const multiplier = getWinMultiplier(newWinStreak);
-          extraCoins += Math.floor(winBetsMission.reward * multiplier);
-          extraXp += getXpForAction("complete_mission");
-          if (extraCoins > 0) {
-            ops.push(
-              prisma.transaction.create({
-                data: {
-                  userId: bet.userId,
-                  type: "mission_reward",
-                  amount: Math.floor(winBetsMission.reward * getWinMultiplier(newWinStreak)),
-                  referenceId: winBetsMission.key,
-                },
-              })
-            );
+              update: {
+                progress: newProg,
+                completed: nowCompleted,
+                claimedAt: nowCompleted ? new Date() : undefined,
+              },
+            }),
+          );
+          if (nowCompleted) {
+            const multiplier = getWinMultiplier(newWinStreak);
+            extraCoins = Math.floor(winBetsMission.reward * multiplier);
+            extraXp += getXpForAction("complete_mission");
+            if (extraCoins > 0) {
+              missionOps.push(
+                prisma.transaction.create({
+                  data: {
+                    userId: summary.userId,
+                    type: "mission_reward",
+                    amount: extraCoins,
+                    referenceId: winBetsMission.key,
+                  },
+                }),
+              );
+            }
           }
         }
       }
-    }
 
-    if (bet.userId !== creatorId) {
-      const newBalance = betUser.balance + payout + extraCoins;
+      const newBalance = betUser.balance + totalPayout + extraCoins;
       const newXp = betUser.xp + extraXp;
       const newLevel = getLevelFromXp(newXp);
+
+      // Create one win transaction per winning bet
+      const winTxOps = summary.winningBets.map((b: BetRow) => {
+        const betPayout = Math.floor((b.shares ?? b.amount / 50) * 100);
+        return prisma.transaction.create({
+          data: {
+            userId: summary.userId,
+            type: "win",
+            amount: betPayout,
+            referenceId: b.id,
+          },
+        });
+      });
 
       await prisma.$transaction([
         prisma.user.update({
-          where: { id: bet.userId },
-          data: { balance: newBalance, winStreak: newWinStreak, xp: newXp, level: newLevel },
-        }),
-        prisma.transaction.create({
+          where: { id: summary.userId },
           data: {
-            userId: bet.userId,
-            type: "win",
-            amount: payout,
-            balanceAfter: newBalance,
-            referenceId: bet.id,
+            balance: newBalance,
+            winStreak: newWinStreak,
+            xp: newXp,
+            level: newLevel,
+            eloRating: newEloRating,
           },
         }),
-        ...ops,
+        ...winTxOps,
+        prisma.portfolioSnapshot.create({
+          data: { userId: summary.userId, totalValue: newBalance },
+        }),
+        ...missionOps,
       ]);
     } else {
-      // Creator's XP/streak update (balance handled below)
-      const newXp = betUser.xp + extraXp;
+      // ── Loser processing ─────────────────────────────────────────────────
+      const isNearMiss = nearMissUserIds.has(summary.userId);
+      const nearMissBonus = isNearMiss ? 50 : 0;
+      const nearMissXp = isNearMiss ? getXpForAction("near_miss") : 0;
+      const newXp = betUser.xp + nearMissXp;
       const newLevel = getLevelFromXp(newXp);
-      await prisma.user.update({
-        where: { id: bet.userId },
-        data: { winStreak: newWinStreak, xp: newXp, level: newLevel },
-      });
-      if (ops.length > 0) {
-        await prisma.$transaction(ops);
-      }
+      const newBalance = betUser.balance + nearMissBonus;
+
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: summary.userId },
+          data: {
+            winStreak: 0,
+            xp: newXp,
+            level: newLevel,
+            balance: newBalance,
+            eloRating: newEloRating,
+          },
+        }),
+        prisma.portfolioSnapshot.create({
+          data: { userId: summary.userId, totalValue: newBalance },
+        }),
+        ...(isNearMiss
+          ? [
+              prisma.transaction.create({
+                data: {
+                  userId: summary.userId,
+                  type: "near_miss",
+                  amount: nearMissBonus,
+                  balanceAfter: newBalance,
+                  referenceId: marketId,
+                },
+              }),
+            ]
+          : []),
+      ]);
     }
   }
 
-  // ─── Process losers: reset winStreak, near-miss consolation ───────────────
-  // Deduplicate losing users
-  const processedLosers = new Set<string>();
-  for (const bet of losingBets) {
-    if (processedLosers.has(bet.userId)) continue;
-    processedLosers.add(bet.userId);
-
-    const betUser = userMap.get(bet.userId);
-    if (!betUser) continue;
-
-    const isNearMiss = nearMissUserIds.has(bet.userId);
-    const nearMissBonus = isNearMiss ? 50 : 0;
-    const nearMissXp = isNearMiss ? getXpForAction("near_miss") : 0;
-    const newXp = betUser.xp + nearMissXp;
-    const newLevel = getLevelFromXp(newXp);
-    const newBalance = betUser.balance + nearMissBonus;
-
-    await prisma.$transaction([
+  // ─── Creator deposit refund + reward ──────────────────────────────────────
+  const creatorTxOps = [];
+  if (shouldRefundDeposit) {
+    creatorTxOps.push(
       prisma.user.update({
-        where: { id: bet.userId },
-        data: { winStreak: 0, xp: newXp, level: newLevel, balance: newBalance },
+        where: { id: market.createdById },
+        data: { balance: { increment: creatorDeposit } },
       }),
-      ...(isNearMiss
-        ? [
-            prisma.transaction.create({
-              data: {
-                userId: bet.userId,
-                type: "near_miss",
-                amount: nearMissBonus,
-                balanceAfter: newBalance,
-                referenceId: marketId,
-              },
-            }),
-          ]
-        : []),
-    ]);
+      prisma.transaction.create({
+        data: {
+          userId: market.createdById,
+          type: "deposit_refund",
+          amount: creatorDeposit,
+          referenceId: marketId,
+        },
+      }),
+    );
+  }
+  if (creatorReward > 0) {
+    creatorTxOps.push(
+      prisma.user.update({
+        where: { id: market.createdById },
+        data: { balance: { increment: creatorReward } },
+      }),
+      prisma.transaction.create({
+        data: {
+          userId: market.createdById,
+          type: "creator_reward",
+          amount: creatorReward,
+          referenceId: marketId,
+        },
+      }),
+    );
   }
 
-  // ─── Creator balance + transactions ───────────────────────────────────────
-  const creatorWinTx =
-    creatorPayout > 0
-      ? prisma.transaction.create({
-          data: {
-            userId: market.createdById,
-            type: "win",
-            amount: creatorPayout,
-            balanceAfter: creator.balance + creatorPayout,
-            referenceId: creatorWinningBets[0]?.id ?? marketId,
-          },
-        })
-      : null;
-
-  await prisma.$transaction([
-    prisma.market.update({
-      where: { id: marketId },
-      data: { resolvedOutcomeId: outcomeId },
-    }),
-    prisma.user.update({
-      where: { id: market.createdById },
-      data: { balance: creatorNewBalance },
-    }),
-    ...(creatorWinTx ? [creatorWinTx] : []),
-    ...(shouldRefundDeposit
-      ? [
-          prisma.transaction.create({
-            data: {
-              userId: market.createdById,
-              type: "deposit_refund",
-              amount: creatorDeposit,
-              balanceAfter: creator.balance + creatorPayout + creatorDeposit,
-              referenceId: marketId,
-            },
-          }),
-        ]
-      : []),
-    ...(creatorReward > 0
-      ? [
-          prisma.transaction.create({
-            data: {
-              userId: market.createdById,
-              type: "creator_reward",
-              amount: creatorReward,
-              balanceAfter: creatorNewBalance,
-              referenceId: marketId,
-            },
-          }),
-        ]
-      : []),
-  ]);
+  // Run creator ops sequentially (SQLite single-writer)
+  for (const op of creatorTxOps) {
+    await op;
+  }
 
   revalidatePath("/");
   revalidatePath("/markets");
   revalidatePath(`/markets/${marketId}`);
+  revalidatePath("/portfolio");
   return { ok: true };
 }

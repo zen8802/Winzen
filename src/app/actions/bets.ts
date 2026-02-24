@@ -12,7 +12,7 @@ import {
   getLevelFromXp,
   isTrendingMarket,
 } from "@/lib/gamification";
-import { computeProbabilities } from "@/lib/probability";
+import { computeAmmProbability } from "@/lib/probability";
 
 const placeBetSchema = z.object({
   marketId: z.string(),
@@ -34,7 +34,7 @@ export async function placeBet(formData: FormData) {
 
   const { marketId, outcomeId, amount } = parsed.data;
 
-  const [user, market, existingBets, currentBetTotals] = await Promise.all([
+  const [user, market, existingBets] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { balance: true, winStreak: true, xp: true, level: true },
@@ -47,11 +47,6 @@ export async function placeBet(formData: FormData) {
       where: { userId: session.user.id, marketId },
       select: { outcomeId: true },
     }),
-    prisma.bet.groupBy({
-      by: ["outcomeId"],
-      where: { marketId },
-      _sum: { amount: true },
-    }),
   ]);
 
   if (!user) return { error: "User not found" };
@@ -61,26 +56,24 @@ export async function placeBet(formData: FormData) {
   if (!market.outcomes.some((o) => o.id === outcomeId)) return { error: "Invalid outcome" };
   if (user.balance < amount) return { error: "Insufficient balance" };
 
-  const betOutcomes = Array.from(new Set(existingBets.map((b) => b.outcomeId)));
-  if (betOutcomes.length > 0 && !betOutcomes.includes(outcomeId)) {
-    const existingOutcome = market.outcomes.find((o) => o.id === betOutcomes[0]);
-    return {
-      error: `You've already bet on "${existingOutcome?.label ?? "this outcome"}". You can only add to your position, not switch sides.`,
-    };
-  }
+  const chosenOutcome = market.outcomes.find((o) => o.id === outcomeId)!;
+  const isYes = chosenOutcome.label.toLowerCase().startsWith("yes");
+  const direction: 1 | -1 = isYes ? 1 : -1;
+
+  // ─── AMM Pricing ──────────────────────────────────────────────────────────
+  const newYesProb = computeAmmProbability(
+    market.currentProbability,
+    amount,
+    direction,
+    market.liquidity,
+  );
+  // entryProbability = probability of the CHOSEN outcome (1–99 scale)
+  const entryProbability = isYes ? newYesProb : 100 - newYesProb;
+  const shares = amount / entryProbability;
 
   const newBalance = user.balance - amount;
   const isNewParticipant = existingBets.length === 0;
 
-  // ─── Probability snapshot (post-bet state) ────────────────────────────────
-  const poolByOutcome = new Map<string, number>();
-  for (const row of currentBetTotals) {
-    poolByOutcome.set(row.outcomeId, row._sum.amount ?? 0);
-  }
-  const simulatedPool = new Map(poolByOutcome);
-  simulatedPool.set(outcomeId, (simulatedPool.get(outcomeId) ?? 0) + amount);
-  const postBetProbs = computeProbabilities(market.outcomes, simulatedPool);
-  const entryProbability = postBetProbs.get(outcomeId)!;
   const snapshotNow = new Date();
 
   // ─── XP ───────────────────────────────────────────────────────────────────
@@ -92,7 +85,7 @@ export async function placeBet(formData: FormData) {
   const isTrending = isTrendingMarket(market.totalVolume, market.participantCount);
 
   const relevantMissions = dailyMissions.filter(
-    (m) => m.type === "place_bets" || (m.type === "bet_trending" && isTrending)
+    (m) => m.type === "place_bets" || (m.type === "bet_trending" && isTrending),
   );
 
   const missionKeys = relevantMissions.map((m) => m.key);
@@ -104,7 +97,6 @@ export async function placeBet(formData: FormData) {
       : [];
   const progressMap = new Map(existingProgress.map((p) => [p.missionKey, p]));
 
-  // Pre-compute mission outcomes
   type MissionOutcome = {
     key: string;
     newProgress: number;
@@ -148,12 +140,20 @@ export async function placeBet(formData: FormData) {
     });
 
     await tx.bet.create({
-      data: { userId: session.user.id, marketId, outcomeId, amount, entryProbability },
+      data: {
+        userId: session.user.id,
+        marketId,
+        outcomeId,
+        amount,
+        entryProbability,
+        shares,
+      },
     });
 
     await tx.market.update({
       where: { id: marketId },
       data: {
+        currentProbability: newYesProb,
         totalVolume: { increment: amount },
         ...(isNewParticipant ? { participantCount: { increment: 1 } } : {}),
       },
@@ -169,7 +169,6 @@ export async function placeBet(formData: FormData) {
       },
     });
 
-    // Mission upserts
     for (const mo of missionOutcomes) {
       await tx.userMissionProgress.upsert({
         where: {
@@ -206,14 +205,17 @@ export async function placeBet(formData: FormData) {
       }
     }
 
-    // Probability snapshot
+    // Probability snapshot (0.01–0.99 scale for chart compatibility)
     await tx.probabilitySnapshot.createMany({
-      data: market.outcomes.map((o) => ({
-        marketId,
-        outcomeId: o.id,
-        probability: postBetProbs.get(o.id)!,
-        recordedAt: snapshotNow,
-      })),
+      data: market.outcomes.map((o) => {
+        const oIsYes = o.label.toLowerCase().startsWith("yes");
+        return {
+          marketId,
+          outcomeId: o.id,
+          probability: oIsYes ? newYesProb / 100 : (100 - newYesProb) / 100,
+          recordedAt: snapshotNow,
+        };
+      }),
     });
   });
 
@@ -222,4 +224,76 @@ export async function placeBet(formData: FormData) {
   revalidatePath(`/markets/${marketId}`);
   revalidatePath("/portfolio");
   return { ok: true, missionRewards: missionCoinRewards };
+}
+
+// ─── Cash Out (early exit) ────────────────────────────────────────────────────
+
+const cashOutSchema = z.object({ betId: z.string() });
+
+export async function cashOut(formData: FormData) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return { error: "Not signed in" };
+
+  const parsed = cashOutSchema.safeParse({ betId: formData.get("betId") });
+  if (!parsed.success) return { error: "Invalid input" };
+
+  const { betId } = parsed.data;
+
+  const bet = await prisma.bet.findUnique({
+    where: { id: betId },
+    include: {
+      market: { select: { id: true, currentProbability: true, resolvedOutcomeId: true } },
+      outcome: { select: { label: true } },
+    },
+  });
+
+  if (!bet) return { error: "Bet not found" };
+  if (bet.userId !== session.user.id) return { error: "Not your bet" };
+  if (bet.closedAt) return { error: "Position already closed" };
+  if (bet.market.resolvedOutcomeId) return { error: "Market already resolved — use winnings" };
+
+  const isYes = bet.outcome.label.toLowerCase().startsWith("yes");
+  const currentProbForChosen = isYes
+    ? bet.market.currentProbability
+    : 100 - bet.market.currentProbability;
+  const shares = bet.shares ?? bet.amount / 50;
+  const payout = Math.floor(shares * currentProbForChosen);
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { balance: true },
+  });
+  if (!user) return { error: "User not found" };
+
+  const newBalance = user.balance + payout;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.bet.update({
+      where: { id: betId },
+      data: { closedAt: new Date(), exitProbability: currentProbForChosen },
+    });
+
+    await tx.user.update({
+      where: { id: session.user.id },
+      data: { balance: newBalance },
+    });
+
+    await tx.transaction.create({
+      data: {
+        userId: session.user.id,
+        type: "cashout",
+        amount: payout,
+        balanceAfter: newBalance,
+        referenceId: betId,
+      },
+    });
+
+    await tx.portfolioSnapshot.create({
+      data: { userId: session.user.id, totalValue: newBalance },
+    });
+  });
+
+  revalidatePath(`/markets/${bet.market.id}`);
+  revalidatePath("/portfolio");
+  return { ok: true, payout };
 }

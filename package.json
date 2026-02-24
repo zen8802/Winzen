@@ -9,7 +9,9 @@
     "lint": "next lint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:migrate-positions": "tsx prisma/migrate-positions.ts",
+    "db:seed-admin": "tsx prisma/seed-admin.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

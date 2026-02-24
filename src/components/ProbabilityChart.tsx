@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import {
   LineChart,
   Line,
@@ -45,6 +45,39 @@ type Props = {
   marketClosed: boolean;
 };
 
+// Extracted tooltip so Recharts gets a stable component reference
+const ChartTooltip = memo(function ChartTooltip({
+  active,
+  payload,
+  label,
+  outcomes,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  active?: boolean; payload?: any[]; label?: string; outcomes: Outcome[];
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs shadow-xl">
+      <p className="mb-1.5 text-[var(--muted)]">
+        {new Date(label as string).toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </p>
+      {payload.map((entry) => {
+        const outcome = outcomes.find((o) => o.id === entry.dataKey);
+        return (
+          <p key={entry.dataKey as string} style={{ color: entry.color as string }}>
+            {outcome?.label ?? entry.dataKey}: {entry.value}%
+          </p>
+        );
+      })}
+    </div>
+  );
+});
+
 export function ProbabilityChart({
   marketId,
   outcomes,
@@ -65,21 +98,20 @@ export function ProbabilityChart({
     return () => clearInterval(interval);
   }, [fetchSnapshots, marketClosed]);
 
-  const chartData = transformSnapshots(snapshots);
+  // ─── Memoized derived data ────────────────────────────────────────────────
+  const chartData = useMemo(() => transformSnapshots(snapshots), [snapshots]);
 
-  // ─── Activity signals ────────────────────────────────────────────────────
-  const isMoving = (() => {
+  const isMoving = useMemo(() => {
     const sixtySecondsAgo = Date.now() - 60_000;
     const recentTimestamps = new Set(
       snapshots
         .filter((s) => new Date(s.recordedAt).getTime() > sixtySecondsAgo)
         .map((s) => s.recordedAt)
     );
-    // Subtract 1 for the initial creation snapshot
     return recentTimestamps.size > 1 && recentTimestamps.size - 1 >= 3;
-  })();
+  }, [snapshots]);
 
-  const hasSpike = (() => {
+  const hasSpike = useMemo(() => {
     if (chartData.length < 2) return false;
     const prev = chartData[chartData.length - 2];
     const last = chartData[chartData.length - 1];
@@ -89,25 +121,30 @@ export function ProbabilityChart({
       if (prevVal === undefined || lastVal === undefined) return false;
       return Math.abs(lastVal - prevVal) > 5;
     });
-  })();
+  }, [chartData, outcomes]);
 
-  // ─── User position overlay ───────────────────────────────────────────────
-  const entryPoint =
-    userPosition && chartData.length > 0
-      ? chartData.reduce((best, point) => {
-          const diff = Math.abs(
-            new Date(point.time).getTime() - new Date(userPosition.entryTimestamp).getTime()
-          );
-          const bestDiff = Math.abs(
-            new Date(best.time).getTime() - new Date(userPosition.entryTimestamp).getTime()
-          );
-          return diff < bestDiff ? point : best;
-        }, chartData[0])
-      : null;
+  // Pre-parse entry timestamp once; reduce no longer parses dates inside the loop
+  const entryPoint = useMemo(() => {
+    if (!userPosition || chartData.length === 0) return null;
+    const entryTs = new Date(userPosition.entryTimestamp).getTime();
+    return chartData.reduce((best, point) => {
+      const diff = Math.abs(new Date(point.time).getTime() - entryTs);
+      const bestDiff = Math.abs(new Date(best.time).getTime() - entryTs);
+      return diff < bestDiff ? point : best;
+    }, chartData[0]);
+  }, [userPosition, chartData]);
 
-  const userOutcomeIndex = userPosition
-    ? outcomes.findIndex((o) => o.id === userPosition.outcomeId)
-    : -1;
+  const userOutcomeIndex = useMemo(
+    () => (userPosition ? outcomes.findIndex((o) => o.id === userPosition.outcomeId) : -1),
+    [userPosition, outcomes]
+  );
+
+  // Stable tooltip renderer — outcomes ref doesn't change between polls
+  const renderTooltip = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (props: any) => <ChartTooltip {...props} outcomes={outcomes} />,
+    [outcomes]
+  );
 
   // ─── Fallback ────────────────────────────────────────────────────────────
   if (chartData.length === 0) {
@@ -165,31 +202,7 @@ export function ProbabilityChart({
             tickLine={false}
             width={36}
           />
-          <Tooltip
-            content={({ active, payload, label }) => {
-              if (!active || !payload?.length) return null;
-              return (
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs shadow-xl">
-                  <p className="mb-1.5 text-[var(--muted)]">
-                    {new Date(label as string).toLocaleString([], {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                  {payload.map((entry) => {
-                    const outcome = outcomes.find((o) => o.id === entry.dataKey);
-                    return (
-                      <p key={entry.dataKey as string} style={{ color: entry.color as string }}>
-                        {outcome?.label ?? entry.dataKey}: {entry.value}%
-                      </p>
-                    );
-                  })}
-                </div>
-              );
-            }}
-          />
+          <Tooltip content={renderTooltip} />
           {outcomes.map((outcome, i) => (
             <Line
               key={outcome.id}
@@ -205,13 +218,13 @@ export function ProbabilityChart({
           {userPosition && entryPoint && userOutcomeIndex >= 0 && (
             <ReferenceDot
               x={entryPoint.time}
-              y={Math.round(userPosition.entryProbability * 1000) / 10}
+              y={Math.round(userPosition.entryProbability)}
               r={5}
               fill={getColor(userOutcomeIndex)}
               stroke="#0c0f14"
               strokeWidth={2}
               label={{
-                value: `You: ${Math.round(userPosition.entryProbability * 100)}%`,
+                value: `You: ${Math.round(userPosition.entryProbability)}%`,
                 position: "top",
                 fontSize: 10,
                 fill: "#8b9cb3",

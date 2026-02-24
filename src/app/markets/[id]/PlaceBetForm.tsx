@@ -1,66 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { placeBet } from "@/app/actions/bets";
 import { useRouter } from "next/navigation";
 import { formatCoins } from "@/lib/coins";
-import { getOutcomeColors } from "@/lib/outcome-colors";
+import { computeAmmProbability } from "@/lib/probability";
 
-type OutcomeShare = { id: string; label: string; amount: number; pct: number };
+const QUICK_AMOUNTS = [50, 100, 500];
 
 export function PlaceBetForm({
   marketId,
   outcomes,
-  outcomeShares,
-  totalPool,
+  currentProbability,
   userBalance,
-  existingOutcomeId,
+  liquidity,
 }: {
   marketId: string;
   outcomes: { id: string; label: string }[];
-  outcomeShares: OutcomeShare[];
-  totalPool: number;
+  currentProbability: number; // 1–99, probability of YES
   userBalance: number;
-  existingOutcomeId?: string | null;
+  liquidity: number;
 }) {
   const router = useRouter();
-  const lockedOutcome = existingOutcomeId ?? null;
-  const [selectedOutcomeId, setSelectedOutcomeId] = useState<string>(
-    lockedOutcome ?? outcomes[0]?.id ?? ""
-  );
+  const [isPending, startTransition] = useTransition();
+  const yesOutcome = outcomes.find((o) => o.label.toLowerCase().startsWith("yes")) ?? outcomes[0];
+  const noOutcome = outcomes.find((o) => o.label.toLowerCase().startsWith("no")) ?? outcomes[1];
+
+  const [selectedOutcomeId, setSelectedOutcomeId] = useState<string>(yesOutcome?.id ?? "");
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const selectedShare = outcomeShares.find((o) => o.id === selectedOutcomeId);
   const amountNum = parseInt(amount, 10) || 0;
   const validAmount = amountNum >= 1 && amountNum <= userBalance;
-  // Parimutuel: if this outcome wins, you get amount * (totalPool + amount) / (outcomePool + amount)
-  const potentialPayout =
-    validAmount && selectedShare
-      ? Math.round((amountNum * (totalPool + amountNum)) / (selectedShare.amount + amountNum))
-      : 0;
-  const potentialPct =
-    validAmount && selectedShare && totalPool + amountNum > 0
-      ? Math.round((100 * (selectedShare.amount + amountNum)) / (totalPool + amountNum))
-      : 0;
+
+  const isYesSelected =
+    outcomes.find((o) => o.id === selectedOutcomeId)?.label.toLowerCase().startsWith("yes") ??
+    true;
+
+  // Preview: compute new probability and shares if this bet were placed
+  const preview = useMemo(() => {
+    if (!validAmount) return null;
+    const newYesProb = computeAmmProbability(currentProbability, amountNum, isYesSelected ? 1 : -1, liquidity);
+    const entryProb = isYesSelected ? newYesProb : 100 - newYesProb;
+    const shares = amountNum / entryProb;
+    const maxWin = Math.floor(shares * 100);
+    return { newYesProb, entryProb, shares, maxWin, pnl: maxWin - amountNum };
+  }, [validAmount, amountNum, isYesSelected, currentProbability, liquidity]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     const num = parseInt(amount, 10);
-    if (!num || num < 1) {
-      setError("Enter a valid amount");
-      return;
-    }
-    if (num > userBalance) {
-      setError("Insufficient balance");
-      return;
-    }
-    if (!selectedOutcomeId) {
-      setError("Select an outcome");
-      return;
-    }
+    if (!num || num < 1) { setError("Enter a valid amount"); return; }
+    if (num > userBalance) { setError("Insufficient balance"); return; }
+    if (!selectedOutcomeId) { setError("Select YES or NO"); return; }
     setLoading(true);
     const formData = new FormData();
     formData.set("marketId", marketId);
@@ -73,60 +67,91 @@ export function PlaceBetForm({
       return;
     }
     window.dispatchEvent(new CustomEvent("balance-updated"));
-    router.refresh();
     setAmount("");
+    // Non-blocking refresh — page stays interactive while server data updates
+    startTransition(() => { router.refresh(); });
   }
+
+  const yesProb = Math.round(currentProbability);
+  const noProb = 100 - yesProb;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 border-t border-[var(--border)] pt-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="flex items-baseline justify-between gap-2">
         <p className="text-sm font-medium text-[var(--muted)]">
-          Your balance: <span className="font-mono text-[var(--coin)]">{formatCoins(userBalance)}</span>
-        </p>
-        <p className="text-xs text-[var(--muted)]">
-          Total pool: <span className="font-mono text-[var(--text)]">{formatCoins(totalPool)}</span>
+          Balance:{" "}
+          <span className="font-mono text-[var(--coin)]">{formatCoins(userBalance)}</span>
         </p>
       </div>
 
-      <div>
-        <p className="mb-2 text-sm font-medium text-[var(--muted)]">
-          {lockedOutcome ? "Add to your position" : "Pick an outcome (one side only)"}
-        </p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {outcomeShares.map((o, i) => {
-            const c = getOutcomeColors(i);
-            const isSelected = selectedOutcomeId === o.id;
-            const isLocked = !!lockedOutcome;
-            const isDisabled = isLocked && o.id !== lockedOutcome;
-            return (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => !isDisabled && setSelectedOutcomeId(o.id)}
-                disabled={isDisabled}
-                className="flex flex-col items-start rounded-xl border-2 p-3 text-left transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                style={{
-                  borderColor: isSelected ? c.border : "var(--border)",
-                  backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
-                }}
+      {/* Side selector */}
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { outcome: yesOutcome, prob: yesProb, isYes: true },
+          { outcome: noOutcome, prob: noProb, isYes: false },
+        ].map(({ outcome, prob, isYes }) => {
+          if (!outcome) return null;
+          const isSelected = selectedOutcomeId === outcome.id;
+          return (
+            <button
+              key={outcome.id}
+              type="button"
+              onClick={() => setSelectedOutcomeId(outcome.id)}
+              className="flex flex-col items-center rounded-xl border-2 p-4 text-center transition-all hover:opacity-90"
+              style={{
+                borderColor: isSelected
+                  ? isYes
+                    ? "#22c55e"
+                    : "#f97316"
+                  : "var(--border)",
+                backgroundColor: isSelected
+                  ? isYes
+                    ? "rgba(34,197,94,0.1)"
+                    : "rgba(249,115,22,0.1)"
+                  : "rgba(255,255,255,0.03)",
+              }}
+            >
+              <span
+                className="text-xl font-extrabold"
+                style={{ color: isYes ? "#22c55e" : "#f97316" }}
               >
-                <span className="font-medium text-[var(--text)]">{o.label}</span>
-                <span className="mt-1 font-mono text-xs" style={{ color: c.text }}>
-                  {o.pct}% · {o.amount} coins
-                </span>
-                {isDisabled && (
-                  <span className="mt-1 text-xs text-[var(--muted)]">Already bet on other side</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                {prob}%
+              </span>
+              <span className="mt-1 text-sm font-semibold text-[var(--text)]">
+                {isYes ? "YES" : "NO"}
+              </span>
+              <span className="mt-0.5 text-xs text-[var(--muted)]">
+                {isSelected ? "Selected" : `Buy ${outcome.label}`}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      <div className="rounded-xl border border-[var(--border)] bg-white/[0.02] p-4">
-        <label htmlFor="amount" className="mb-2 block text-sm font-medium text-[var(--muted)]">
-          Amount to bet (coins)
+      {/* Amount input */}
+      <div className="rounded-xl border border-[var(--border)] bg-white/[0.02] p-4 space-y-3">
+        <label htmlFor="amount" className="block text-sm font-medium text-[var(--muted)]">
+          Coins to spend
         </label>
+        <div className="flex items-center gap-2 flex-wrap">
+          {QUICK_AMOUNTS.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => setAmount(String(Math.min(q, userBalance)))}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-mono text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)] transition"
+            >
+              {q}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setAmount(String(userBalance))}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-mono text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)] transition"
+          >
+            MAX
+          </button>
+        </div>
         <input
           id="amount"
           type="number"
@@ -134,17 +159,37 @@ export function PlaceBetForm({
           max={userBalance}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder="e.g. 50"
-          className="mb-3 w-full max-w-[200px] rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono text-[var(--text)] outline-none focus:border-[var(--accent)]"
+          placeholder="e.g. 100"
+          className="w-full max-w-[200px] rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono text-[var(--text)] outline-none focus:border-[var(--accent)]"
         />
-        {validAmount && selectedShare && (
-          <div className="space-y-1 text-sm">
-            <p className="text-[var(--muted)]">
-              If <span className="font-medium text-[var(--text)]">{selectedShare.label}</span> wins:
-            </p>
-            <p className="font-mono text-[var(--accent)]">
-              Potential payout: ~{formatCoins(potentialPayout)} ({potentialPct}% of pool)
-            </p>
+
+        {/* Preview */}
+        {preview && (
+          <div className="space-y-1 text-sm border-t border-[var(--border)] pt-3">
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Shares</span>
+              <span className="font-mono text-[var(--text)]">{preview.shares.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Max win (if {isYesSelected ? "YES" : "NO"})</span>
+              <span className="font-mono text-[var(--accent)]">{formatCoins(preview.maxWin)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Potential profit</span>
+              <span
+                className="font-mono"
+                style={{ color: preview.pnl >= 0 ? "#22c55e" : "#f97316" }}
+              >
+                {preview.pnl >= 0 ? "+" : ""}
+                {preview.pnl} coins
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-[var(--muted)]">Price impact</span>
+              <span className="font-mono text-[var(--muted)]">
+                {currentProbability.toFixed(1)}% → {preview.newYesProb.toFixed(1)}% YES
+              </span>
+            </div>
           </div>
         )}
       </div>
@@ -154,10 +199,16 @@ export function PlaceBetForm({
       )}
       <button
         type="submit"
-        disabled={loading || !selectedOutcomeId || !validAmount}
+        disabled={loading || isPending || !selectedOutcomeId || !validAmount}
         className="btn-primary w-full sm:w-auto"
       >
-        {loading ? "Placing…" : "Place bet"}
+        {loading
+          ? "Placing…"
+          : isPending
+            ? "Updating…"
+            : validAmount
+              ? `Buy ${isYesSelected ? "YES" : "NO"} · ${amountNum} coins`
+              : "Place bet"}
       </button>
     </form>
   );
