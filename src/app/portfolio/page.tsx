@@ -145,10 +145,11 @@ export default async function PortfolioPage() {
         <section className="card">
           <p className="text-sm text-[var(--muted)]">Unrealized PnL</p>
           <p
-            className="text-3xl font-mono"
+            className="inline-flex items-center gap-2 text-3xl font-mono"
             style={{ color: unrealizedPnl >= 0 ? "#22c55e" : "#f97316" }}
           >
             {unrealizedPnl >= 0 ? "+" : ""}
+            <CoinIcon size={28} />
             {Math.round(unrealizedPnl)}
           </p>
         </section>
@@ -156,10 +157,11 @@ export default async function PortfolioPage() {
         <section className="card">
           <p className="text-sm text-[var(--muted)]">Realized PnL</p>
           <p
-            className="text-3xl font-mono"
+            className="inline-flex items-center gap-2 text-3xl font-mono"
             style={{ color: realizedPnl >= 0 ? "#22c55e" : "#f97316" }}
           >
             {realizedPnl >= 0 ? "+" : ""}
+            <CoinIcon size={28} />
             {Math.round(realizedPnl)}
           </p>
         </section>
@@ -211,13 +213,15 @@ export default async function PortfolioPage() {
                 </div>
                 <div className="text-right">
                   <p
-                    className="font-mono text-sm font-bold"
+                    className="inline-flex items-center gap-1 font-mono text-sm font-bold"
                     style={{ color: pnl >= 0 ? "#22c55e" : "#f97316" }}
                   >
                     {pnl >= 0 ? "+" : ""}
-                    {pnl.toFixed(0)}
+                    <CoinIcon size={13} />{pnl.toFixed(0)}
                   </p>
-                  <p className="text-xs text-[var(--muted)]">{bet.amount} spent</p>
+                  <p className="flex items-center justify-end gap-0.5 text-xs text-[var(--muted)]">
+                    <CoinIcon size={10} />{bet.amount.toLocaleString()} spent
+                  </p>
                 </div>
               </li>
             );
@@ -305,7 +309,7 @@ export default async function PortfolioPage() {
                       className="inline-flex items-center gap-1 font-mono text-sm font-bold"
                       style={{ color: pnl >= 0 ? "#22c55e" : "#f97316" }}
                     >
-                      {pnl >= 0 ? "+" : ""}{pnl} <CoinIcon size={13} />
+                      {pnl >= 0 ? "+" : ""}<CoinIcon size={13} />{pnl}
                     </p>
                     <p className="text-xs text-[var(--muted)]">Cashed out</p>
                   </div>
@@ -346,7 +350,7 @@ export default async function PortfolioPage() {
               <span className="text-[var(--muted)]">{TX_LABELS[tx.type] ?? tx.type}</span>
               <span className={`inline-flex items-center gap-1 font-mono ${tx.amount >= 0 ? "text-[var(--accent)]" : "text-red-400"}`}>
                 {tx.amount >= 0 ? "+" : ""}
-                {tx.amount.toLocaleString()} <CoinIcon size={13} />
+                <CoinIcon size={13} />{tx.amount.toLocaleString()}
               </span>
             </li>
           ))}

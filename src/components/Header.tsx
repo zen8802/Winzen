@@ -5,8 +5,9 @@ import { useSession } from "next-auth/react";
 import { getCurrentUserBalance } from "@/app/actions/user";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { formatCoins } from "@/lib/coins";
 import { CoinIcon } from "@/components/CoinIcon";
+import { NotificationBell } from "@/components/NotificationBell";
+import { SettingsDropdown } from "@/components/SettingsDropdown";
 
 export function Header() {
   const { data: session, status } = useSession();
@@ -14,6 +15,10 @@ export function Header() {
   const [balance, setBalance] = useState<number | null>(null);
 
   useEffect(() => {
+    // Don't run while NextAuth is still resolving the session cookie —
+    // prevents a flash of the wrong auth state.
+    if (status === "loading") return;
+
     const fetchBalance = () => {
       if (session?.user?.id) {
         getCurrentUserBalance().then((u) => u && setBalance(u.balance));
@@ -25,7 +30,7 @@ export function Header() {
     const onBalanceUpdated = () => fetchBalance();
     window.addEventListener("balance-updated", onBalanceUpdated);
     return () => window.removeEventListener("balance-updated", onBalanceUpdated);
-  }, [session?.user?.id, pathname]);
+  }, [status, session?.user?.id, pathname]);
 
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur">
@@ -42,10 +47,13 @@ export function Header() {
           )}
         </div>
         <nav className="flex items-center gap-4">
+          <Link href="/leaderboard" className="btn-ghost text-sm">
+            Leaderboard
+          </Link>
           <Link href="/agent" className="btn-ghost text-sm">
             My Agent
           </Link>
-          {status === "authenticated" ? (
+          {status === "loading" ? null : status === "authenticated" ? (
             <>
               <Link href="/portfolio" className="btn-ghost text-sm">
                 Portfolio
@@ -58,9 +66,7 @@ export function Header() {
                   Admin
                 </Link>
               )}
-              <Link href="/api/auth/signout" className="btn-ghost text-sm">
-                Sign out
-              </Link>
+              <NotificationBell />
             </>
           ) : (
             <>
@@ -72,6 +78,7 @@ export function Header() {
               </Link>
             </>
           )}
+          <SettingsDropdown />
         </nav>
       </div>
     </header>

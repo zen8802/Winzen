@@ -295,7 +295,7 @@ export async function resolveMarket(formData: FormData) {
   const affectedUserIds = Array.from(userSummaryMap.keys());
   const affectedUsers = await prisma.user.findMany({
     where: { id: { in: affectedUserIds } },
-    select: { id: true, balance: true, winStreak: true, xp: true, level: true, eloRating: true },
+    select: { id: true, balance: true, winStreak: true, xp: true, level: true, eloRating: true, name: true },
   });
   const userMap = new Map(affectedUsers.map((u) => [u.id, u]));
 
@@ -349,6 +349,9 @@ export async function resolveMarket(formData: FormData) {
         (s: number, b: BetRow) => s + Math.floor((b.shares ?? b.amount / 50) * 100),
         0,
       );
+      const totalWinStake = summary.winningBets.reduce((s: number, b: BetRow) => s + b.amount, 0);
+      const totalLoseStake = summary.losingBets.reduce((s: number, b: BetRow) => s + b.amount, 0);
+      const netProfit = totalPayout - totalWinStake - totalLoseStake;
       const newWinStreak = betUser.winStreak + 1;
       const xpGained = getXpForAction("win_bet");
       let extraCoins = 0;
@@ -432,6 +435,8 @@ export async function resolveMarket(formData: FormData) {
             xp: newXp,
             level: newLevel,
             eloRating: newEloRating,
+            totalWins: { increment: 1 },
+            totalProfit: { increment: netProfit },
           },
         }),
         ...winTxOps,
@@ -448,6 +453,7 @@ export async function resolveMarket(formData: FormData) {
       const newXp = betUser.xp + nearMissXp;
       const newLevel = getLevelFromXp(newXp);
       const newBalance = betUser.balance + nearMissBonus;
+      const totalLost = summary.losingBets.reduce((s: number, b: BetRow) => s + b.amount, 0);
 
       await prisma.$transaction([
         prisma.user.update({
@@ -458,6 +464,8 @@ export async function resolveMarket(formData: FormData) {
             level: newLevel,
             balance: newBalance,
             eloRating: newEloRating,
+            totalLosses: { increment: 1 },
+            totalProfit: { decrement: totalLost },
           },
         }),
         prisma.portfolioSnapshot.create({
@@ -478,6 +486,76 @@ export async function resolveMarket(formData: FormData) {
           : []),
       ]);
     }
+  }
+
+  // ─── Notifications for bettors ────────────────────────────────────────────
+  const resolvedLabel = market.outcomes.find((o) => o.id === outcomeId)?.label ?? outcomeId;
+  const bettorIds = Array.from(userSummaryMap.keys());
+  if (bettorIds.length > 0) {
+    const settingsList = await prisma.userSettings.findMany({
+      where: { userId: { in: bettorIds } },
+      select: { userId: true, notifyOnMarketResolution: true, notifyOnBetResult: true },
+    });
+    const settingsMap = new Map(settingsList.map((s) => [s.userId, s]));
+
+    const notifData: { userId: string; type: string; message: string; marketId: string }[] = [];
+    for (const summary of Array.from(userSummaryMap.values())) {
+      const prefs = settingsMap.get(summary.userId);
+      const wantsBetResult = prefs?.notifyOnBetResult ?? true;
+      const wantsResolution = prefs?.notifyOnMarketResolution ?? true;
+      if (!wantsBetResult && !wantsResolution) continue;
+
+      if (wantsBetResult) {
+        if (summary.won) {
+          const payout = summary.winningBets.reduce(
+            (s: number, b: BetRow) => s + Math.floor((b.shares ?? b.amount / 50) * 100),
+            0,
+          );
+          notifData.push({
+            userId: summary.userId,
+            type: "BET_RESULT",
+            message: `You WON ${payout.toLocaleString()} coins on "${market.title}"`,
+            marketId,
+          });
+        } else {
+          const lost = summary.losingBets.reduce((s: number, b: BetRow) => s + b.amount, 0);
+          notifData.push({
+            userId: summary.userId,
+            type: "BET_RESULT",
+            message: `You LOST ${lost.toLocaleString()} coins on "${market.title}"`,
+            marketId,
+          });
+        }
+      } else {
+        notifData.push({
+          userId: summary.userId,
+          type: "MARKET_RESOLVED",
+          message: `"${market.title}" resolved: ${resolvedLabel}`,
+          marketId,
+        });
+      }
+    }
+    if (notifData.length > 0) {
+      await prisma.notification.createMany({ data: notifData });
+    }
+  }
+
+  // ─── Global activity entry ────────────────────────────────────────────────
+  await prisma.activity.create({
+    data: {
+      type: "MARKET_RESOLVED",
+      marketId,
+      marketTitle: market.title,
+      side: resolvedLabel,
+    },
+  });
+  const activityToDelete = await prisma.activity.findMany({
+    orderBy: { createdAt: "desc" },
+    skip: 200,
+    select: { id: true },
+  });
+  if (activityToDelete.length > 0) {
+    await prisma.activity.deleteMany({ where: { id: { in: activityToDelete.map((a) => a.id) } } });
   }
 
   // ─── Creator deposit refund + reward ──────────────────────────────────────
@@ -524,5 +602,6 @@ export async function resolveMarket(formData: FormData) {
   revalidatePath("/markets");
   revalidatePath(`/markets/${marketId}`);
   revalidatePath("/portfolio");
+  revalidatePath("/leaderboard");
   return { ok: true };
 }

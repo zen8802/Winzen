@@ -37,7 +37,7 @@ export async function placeBet(formData: FormData) {
   const [user, market, existingBets] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { balance: true, winStreak: true, xp: true, level: true },
+      select: { balance: true, winStreak: true, xp: true, level: true, name: true },
     }),
     prisma.market.findUnique({
       where: { id: marketId },
@@ -136,7 +136,7 @@ export async function placeBet(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: session.user.id },
-      data: { balance: finalBalance, xp: finalXp, level: finalLevel },
+      data: { balance: finalBalance, xp: finalXp, level: finalLevel, totalTrades: { increment: 1 } },
     });
 
     await tx.bet.create({
@@ -218,6 +218,30 @@ export async function placeBet(formData: FormData) {
       }),
     });
   });
+
+  // ─── Activity feed entry ──────────────────────────────────────────────────
+  const side = chosenOutcome.label.toLowerCase().startsWith("yes") ? "YES" : "NO";
+  await prisma.activity.create({
+    data: {
+      type: "TRADE",
+      userId: session.user.id,
+      username: user.name ?? undefined,
+      marketId,
+      marketTitle: market.title,
+      side,
+      amount,
+      price: entryProbability,
+    },
+  });
+  // Trim activity table to 200 most recent entries
+  const toDelete = await prisma.activity.findMany({
+    orderBy: { createdAt: "desc" },
+    skip: 200,
+    select: { id: true },
+  });
+  if (toDelete.length > 0) {
+    await prisma.activity.deleteMany({ where: { id: { in: toDelete.map((a) => a.id) } } });
+  }
 
   revalidatePath("/");
   revalidatePath("/markets");

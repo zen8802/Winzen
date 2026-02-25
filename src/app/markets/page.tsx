@@ -40,8 +40,6 @@ function marketStats(market: Awaited<ReturnType<typeof getMarkets>>[0]) {
   for (const b of market.bets) {
     byOutcome.set(b.outcomeId, (byOutcome.get(b.outcomeId) ?? 0) + b.amount);
   }
-  // For binary YES/NO markets use AMM currentProbability as the single source of truth.
-  // For multi-choice markets fall back to parimutuel (AMM only tracks a single YES prob).
   const yesOutcome =
     market.outcomes.length === 2
       ? market.outcomes.find((o) => o.label.toLowerCase().startsWith("yes"))
@@ -56,7 +54,39 @@ function marketStats(market: Awaited<ReturnType<typeof getMarkets>>[0]) {
         : Math.round(100 / market.outcomes.length);
     return { ...o, amount: byOutcome.get(o.id) ?? 0, pct };
   });
-  return { total, outcomeShares, resolved: !!market.resolvedOutcomeId };
+  return { total, outcomeShares, resolved: !!market.resolvedOutcomeId, yesOutcome };
+}
+
+async function get24hDeltas(markets: Awaited<ReturnType<typeof getMarkets>>) {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const yesIds: string[] = [];
+  const marketByYesId = new Map<string, string>();
+
+  for (const m of markets) {
+    const yes = m.outcomes.length === 2
+      ? m.outcomes.find((o) => o.label.toLowerCase().startsWith("yes"))
+      : null;
+    if (yes) {
+      yesIds.push(yes.id);
+      marketByYesId.set(yes.id, m.id);
+    }
+  }
+
+  if (yesIds.length === 0) return new Map<string, number>();
+
+  const snaps = await prisma.probabilitySnapshot.findMany({
+    where: { outcomeId: { in: yesIds }, recordedAt: { lte: cutoff } },
+    orderBy: { recordedAt: "desc" },
+    distinct: ["outcomeId"],
+    select: { outcomeId: true, probability: true },
+  });
+
+  const deltaMap = new Map<string, number>();
+  for (const s of snaps) {
+    const mid = marketByYesId.get(s.outcomeId);
+    if (mid) deltaMap.set(mid, s.probability * 100);
+  }
+  return deltaMap;
 }
 
 export default async function MarketsPage({
@@ -66,14 +96,18 @@ export default async function MarketsPage({
 }) {
   const { tab } = await searchParams;
   const markets = await getMarkets(tab ?? null);
+  const deltas24h = await get24hDeltas(markets);
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">All markets</h1>
       <ul className="space-y-4">
         {markets.map((market) => {
-          const { total, outcomeShares, resolved } = marketStats(market);
+          const { total, outcomeShares, resolved, yesOutcome } = marketStats(market);
           const winner = market.outcomes.find((o) => o.id === market.resolvedOutcomeId);
+          const past24h = yesOutcome ? deltas24h.get(market.id) : undefined;
+          const delta = past24h !== undefined ? market.currentProbability - past24h : undefined;
+
           return (
             <li key={market.id}>
               <Link href={`/markets/${market.id}`} className="card block">
@@ -110,11 +144,26 @@ export default async function MarketsPage({
                       </span>
                     );
                   })}
+                  {!resolved && delta !== undefined && (
+                    <span
+                      className="rounded-md border px-2 py-1 text-sm font-mono"
+                      style={{
+                        borderColor: delta >= 0 ? "rgba(34,197,94,0.3)" : "rgba(249,115,22,0.3)",
+                        color: delta >= 0 ? "#22c55e" : "#f97316",
+                        backgroundColor: delta >= 0 ? "rgba(34,197,94,0.06)" : "rgba(249,115,22,0.06)",
+                      }}
+                    >
+                      {delta >= 0 ? "▲" : "▼"}
+                      {Math.abs(delta).toFixed(1)}% 24h
+                    </span>
+                  )}
                 </div>
                 <p className="mt-2 text-xs text-[var(--muted)]">
                   {resolved ? `Resolved: ${winner?.label ?? "—"}` : (
                     <span className="inline-flex items-center gap-1">
-                      Pool: <CoinIcon size={11} />{total.toLocaleString()}
+                      <CoinIcon size={11} />{total.toLocaleString()}
+                      {" · "}
+                      {market.participantCount} trader{market.participantCount !== 1 ? "s" : ""}
                     </span>
                   )}{" · "}
                   Closes {new Date(market.closesAt).toLocaleDateString()}

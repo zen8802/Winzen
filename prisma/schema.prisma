@@ -20,6 +20,10 @@ model User {
   level         Int       @default(1)
   eloRating     Int       @default(1000)
   role          String    @default("user") // "user" | "admin"
+  totalTrades   Int       @default(0) // lifetime bet placements
+  totalWins     Int       @default(0) // markets resolved in user's favour
+  totalLosses   Int       @default(0) // markets resolved against user
+  totalProfit   Int       @default(0) // net coins gained/lost from resolved markets
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -31,6 +35,8 @@ model User {
   missionProgress    UserMissionProgress[]
   portfolioSnapshots PortfolioSnapshot[]
   comments           Comment[]
+  notifications      Notification[]
+  settings           UserSettings?
 }
 
 model UserMissionProgress {
@@ -111,6 +117,7 @@ model Market {
   bets                 Bet[]
   probabilitySnapshots ProbabilitySnapshot[]
   comments             Comment[]
+  notifications        Notification[]
 
   @@index([closesAt])
   @@index([createdById])
@@ -203,4 +210,44 @@ model Comment {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([marketId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "MARKET_RESOLVED" | "BET_RESULT"
+  message   String
+  marketId  String?  // optional nav hint — no FK constraint needed
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market Market? @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
+
+model UserSettings {
+  userId                   String  @id
+  notifyOnMarketResolution Boolean @default(true)
+  notifyOnBetResult        Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Ephemeral global activity log — capped at 200 rows, no FK constraints for simplicity
+model Activity {
+  id          String   @id @default(cuid())
+  type        String   // "TRADE" | "MARKET_RESOLVED"
+  userId      String?
+  username    String?
+  marketId    String
+  marketTitle String
+  side        String?  // "YES" | "NO" for trades
+  amount      Int?
+  price       Float?   // probability of chosen side at time of trade (1–99)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
 }

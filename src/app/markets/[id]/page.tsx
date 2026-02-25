@@ -24,6 +24,23 @@ async function getMarket(id: string) {
   });
 }
 
+async function get24hDelta(market: NonNullable<Awaited<ReturnType<typeof getMarket>>>) {
+  const yesOutcome =
+    market.outcomes.length === 2
+      ? market.outcomes.find((o) => o.label.toLowerCase().startsWith("yes"))
+      : null;
+  if (!yesOutcome) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const snap = await prisma.probabilitySnapshot.findFirst({
+    where: { outcomeId: yesOutcome.id, recordedAt: { lte: cutoff } },
+    orderBy: { recordedAt: "desc" },
+    select: { probability: true },
+  });
+  if (!snap) return null;
+  return market.currentProbability - snap.probability * 100;
+}
+
 export default async function MarketPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const market = await getMarket(id);
@@ -83,15 +100,16 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
     userBalance = u?.balance ?? 0;
   }
 
-  const [initialSnapshots, userPosition, initialComments] = await Promise.all([
+  const [initialSnapshots, userPosition, initialComments, delta24h] = await Promise.all([
     getMarketSnapshots(id),
     session?.user?.id ? getUserBetPosition(id, session.user.id) : Promise.resolve(null),
     getComments(id),
+    get24hDelta(market),
   ]);
 
   return (
     <div className="space-y-6">
-      <Link href="/markets" className="text-sm text-[var(--muted)] hover:text-[var(--accent)]">
+      <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--accent)]">
         ← Back to markets
       </Link>
       <article className="card space-y-6">
@@ -132,6 +150,26 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
               NO
             </p>
           </div>
+        </div>
+
+        {/* Market stats row */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--muted)]">
+          <span className="inline-flex items-center gap-1">
+            <CoinIcon size={11} />
+            {market.totalVolume.toLocaleString()} volume
+          </span>
+          <span>
+            {market.participantCount} trader{market.participantCount !== 1 ? "s" : ""}
+          </span>
+          {delta24h !== null && (
+            <span
+              className="font-semibold"
+              style={{ color: delta24h >= 0 ? "#22c55e" : "#f97316" }}
+            >
+              {delta24h >= 0 ? "▲" : "▼"}
+              {Math.abs(delta24h).toFixed(1)}% (24h)
+            </span>
+          )}
         </div>
 
         {/* Probability Chart */}
@@ -182,7 +220,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
                       style={{ color: pos.pnl >= 0 ? "#22c55e" : "#f97316" }}
                     >
                       {pos.pnl >= 0 ? "+" : ""}
-                      {pos.pnl.toFixed(0)} <CoinIcon size={13} />
+                      <CoinIcon size={13} />{pos.pnl.toFixed(0)}
                     </span>
                     {!marketClosed && (
                       <CashOutButton betId={pos.id} payout={pos.cashOutPayout} />

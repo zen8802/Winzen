@@ -15,10 +15,29 @@
   --logo-dim: #c026d3;
 }
 
+/* Light theme — applied via data-theme="light" on <html> */
+[data-theme="light"] {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --coin: #ca8a04;
+}
+
+[data-theme="light"] .btn-ghost:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
 body {
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+}
+
+@keyframes activityFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @layer components {

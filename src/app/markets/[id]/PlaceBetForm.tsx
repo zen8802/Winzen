@@ -134,8 +134,8 @@ export function PlaceBetForm({
 
       {/* Amount input */}
       <div className="rounded-xl border border-[var(--border)] bg-white/[0.02] p-4 space-y-3">
-        <label htmlFor="amount" className="block text-sm font-medium text-[var(--muted)]">
-          Coins to spend
+        <label htmlFor="amount" className="inline-flex items-center gap-1 text-sm font-medium text-[var(--muted)]">
+          <CoinIcon size={13} /> to spend
         </label>
         <div className="flex items-center gap-2 flex-wrap">
           {QUICK_AMOUNTS.map((q) => (
@@ -188,7 +188,7 @@ export function PlaceBetForm({
                 style={{ color: preview.pnl >= 0 ? "#22c55e" : "#f97316" }}
               >
                 {preview.pnl >= 0 ? "+" : ""}
-                {preview.pnl} <CoinIcon size={13} />
+                <CoinIcon size={13} />{preview.pnl}
               </span>
             </div>
             <div className="flex justify-between text-xs">

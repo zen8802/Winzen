@@ -5,6 +5,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { Header } from "@/components/Header";
 import { Subheader } from "@/components/Subheader";
+import { ActivityFeed } from "@/components/ActivityFeed";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -30,6 +31,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${outfit.variable} ${jetbrains.variable} font-display antialiased`}>
+      <head>
+        {/* Apply saved theme before React hydrates — prevents flash of wrong theme */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();` }} />
+      </head>
       <body>
         <Providers>
           <Header />
@@ -37,6 +42,7 @@ export default function RootLayout({
             <Subheader />
           </Suspense>
           <main className="mx-auto max-w-4xl px-4 py-8">{children}</main>
+          <ActivityFeed />
         </Providers>
       </body>
     </html>
