@@ -101,7 +101,7 @@ model Market {
   participantCount   Int       @default(0) // unique users who placed at least one bet
   resolvedOutcomeId  String?   // set when market is resolved
   currentProbability Float     @default(50) // 1–99, probability of YES outcome (AMM price)
-  liquidity          Int       @default(100000) // AMM liquidity parameter
+  liquidity          Int       @default(1000) // AMM liquidity parameter; 100-coin bet moves price ~10%
   closesAt           DateTime
   createdAt          DateTime  @default(now())
   createdById        String

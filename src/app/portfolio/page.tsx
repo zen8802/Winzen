@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { formatCoins } from "@/lib/coins";
+import { CoinIcon } from "@/components/CoinIcon";
 import { XPBar } from "@/components/XPBar";
 import { getLevelFromXp, getTitle, xpForLevel, xpForPrevLevel } from "@/lib/gamification";
 import { getPortfolioSnapshots } from "@/app/actions/portfolio";
@@ -114,7 +115,9 @@ export default async function PortfolioPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Portfolio</h1>
+      <h1 className="text-2xl font-bold">
+        Portfolio{user.name ? <span className="text-[var(--muted)]"> · {user.name}</span> : null}
+      </h1>
 
       <XPBar
         xp={user.xp}
@@ -128,7 +131,10 @@ export default async function PortfolioPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <section className="card">
           <p className="text-sm text-[var(--muted)]">Balance</p>
-          <p className="text-3xl font-mono text-[var(--coin)]">{formatCoins(user.balance)}</p>
+          <p className="inline-flex items-center gap-2 text-3xl font-mono text-[var(--coin)]">
+            <CoinIcon size={28} />
+            {user.balance.toLocaleString()}
+          </p>
         </section>
 
         <section className="card">
@@ -247,14 +253,17 @@ export default async function PortfolioPage() {
                       {bet.market.title}
                     </Link>
                     <p className="text-sm text-[var(--muted)]">
-                      {bet.outcome.label} · {bet.amount} coins
+                      {bet.outcome.label} ·{" "}
+                      <span className="inline-flex items-center gap-0.5">
+                        <CoinIcon size={11} />{bet.amount.toLocaleString()}
+                      </span>
                     </p>
                   </div>
                   <span
-                    className="text-sm font-bold"
+                    className="inline-flex items-center gap-1 text-sm font-bold"
                     style={{ color: won ? "#22c55e" : "#f97316" }}
                   >
-                    {won ? `Won · +${payout} coins` : "Lost"}
+                    {won ? <>Won · +<CoinIcon size={13} />{payout.toLocaleString()}</> : "Lost"}
                   </span>
                 </li>
               );
@@ -293,11 +302,10 @@ export default async function PortfolioPage() {
                   </div>
                   <div className="text-right">
                     <p
-                      className="font-mono text-sm font-bold"
+                      className="inline-flex items-center gap-1 font-mono text-sm font-bold"
                       style={{ color: pnl >= 0 ? "#22c55e" : "#f97316" }}
                     >
-                      {pnl >= 0 ? "+" : ""}
-                      {pnl} coins
+                      {pnl >= 0 ? "+" : ""}{pnl} <CoinIcon size={13} />
                     </p>
                     <p className="text-xs text-[var(--muted)]">Cashed out</p>
                   </div>
@@ -336,9 +344,9 @@ export default async function PortfolioPage() {
               className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm"
             >
               <span className="text-[var(--muted)]">{TX_LABELS[tx.type] ?? tx.type}</span>
-              <span className={tx.amount >= 0 ? "text-[var(--accent)]" : "text-red-400"}>
+              <span className={`inline-flex items-center gap-1 font-mono ${tx.amount >= 0 ? "text-[var(--accent)]" : "text-red-400"}`}>
                 {tx.amount >= 0 ? "+" : ""}
-                {tx.amount} coins
+                {tx.amount.toLocaleString()} <CoinIcon size={13} />
               </span>
             </li>
           ))}

@@ -6,6 +6,7 @@ import { getCurrentUserBalance } from "@/app/actions/user";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { formatCoins } from "@/lib/coins";
+import { CoinIcon } from "@/components/CoinIcon";
 
 export function Header() {
   const { data: session, status } = useSession();
@@ -34,8 +35,9 @@ export function Header() {
             Winzen
           </Link>
           {status === "authenticated" && balance !== null && (
-            <span className="font-mono text-sm font-medium text-[var(--coin)]">
-              {formatCoins(balance)}
+            <span className="inline-flex items-center gap-1.5 font-mono text-sm font-medium text-[var(--coin)]">
+              <CoinIcon size={18} />
+              {balance.toLocaleString()}
             </span>
           )}
         </div>

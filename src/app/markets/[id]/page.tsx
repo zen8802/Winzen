@@ -10,6 +10,7 @@ import { CountdownTimer } from "@/components/CountdownTimer";
 import { MarketComments } from "@/components/MarketComments";
 import { getMarketSnapshots, getUserBetPosition } from "@/app/actions/charts";
 import { getComments } from "@/app/actions/comments";
+import { CoinIcon } from "@/components/CoinIcon";
 import Link from "next/link";
 
 async function getMarket(id: string) {
@@ -34,7 +35,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
   const canResolve = isCreator && !resolved && new Date() >= market.closesAt;
   const marketClosed = resolved || new Date() >= market.closesAt;
 
-  const yesProb = Math.round(market.currentProbability);
+  const yesProb = market.currentProbability;
   const noProb = 100 - yesProb;
 
   // User's open positions on this market
@@ -119,14 +120,14 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         {/* Current Probability Display */}
         <div className="flex items-center gap-6 rounded-xl border border-[var(--border)] bg-white/[0.02] p-4">
           <div className="flex-1 text-center">
-            <p className="text-3xl font-extrabold text-green-400">{yesProb}%</p>
+            <p className="text-3xl font-extrabold text-green-400">{yesProb.toFixed(1)}%</p>
             <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               YES
             </p>
           </div>
           <div className="h-12 w-px bg-[var(--border)]" />
           <div className="flex-1 text-center">
-            <p className="text-3xl font-extrabold text-orange-400">{noProb}%</p>
+            <p className="text-3xl font-extrabold text-orange-400">{noProb.toFixed(1)}%</p>
             <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               NO
             </p>
@@ -164,20 +165,24 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
                     </p>
                     <p className="text-xs text-[var(--muted)]">
                       Entry: {pos.entryProbability.toFixed(1)}% · {pos.shares.toFixed(3)} shares ·{" "}
-                      {pos.amount} coins
+                      <span className="inline-flex items-center gap-0.5">
+                        <CoinIcon size={10} />{pos.amount.toLocaleString()}
+                      </span>
                     </p>
                     <p className="text-xs text-[var(--muted)]">
                       Now: {pos.currentProb.toFixed(1)}% · Value:{" "}
-                      {pos.currentValue.toFixed(0)} coins
+                      <span className="inline-flex items-center gap-0.5">
+                        <CoinIcon size={10} />{pos.currentValue.toFixed(0)}
+                      </span>
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span
-                      className="font-mono text-sm font-bold"
+                      className="inline-flex items-center gap-1 font-mono text-sm font-bold"
                       style={{ color: pos.pnl >= 0 ? "#22c55e" : "#f97316" }}
                     >
                       {pos.pnl >= 0 ? "+" : ""}
-                      {pos.pnl.toFixed(0)} coins
+                      {pos.pnl.toFixed(0)} <CoinIcon size={13} />
                     </span>
                     {!marketClosed && (
                       <CashOutButton betId={pos.id} payout={pos.cashOutPayout} />

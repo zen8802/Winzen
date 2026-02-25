@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { setAgentGender, purchaseAgentItem, equipAgentItem } from "@/app/actions/agent";
 import { formatCoins } from "@/lib/coins";
+import { CoinIcon } from "@/components/CoinIcon";
 import { useRouter } from "next/navigation";
 
 type AgentItem = {
@@ -176,8 +177,9 @@ export function AgentShop({
               >
                 <div className="mb-2 flex items-center justify-between">
                   <span className="font-medium text-[var(--text)]">{item.name}</span>
-                  <span className="font-mono text-sm text-[var(--coin)]">
-                    {formatCoins(item.price)}
+                  <span className="inline-flex items-center gap-1 font-mono text-sm text-[var(--coin)]">
+                    <CoinIcon size={13} />
+                    {item.price.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -25,7 +25,7 @@ export function computeProbabilities(
  * @param current  Current YES probability (1–99)
  * @param amount   Coins staked
  * @param direction  +1 for YES bet, -1 for NO bet
- * @param liquidity  Market liquidity parameter (default 100,000)
+ * @param liquidity  Market liquidity parameter (default 1,000)
  */
 export function computeAmmProbability(
   current: number,

@@ -5,6 +5,7 @@ import { placeBet } from "@/app/actions/bets";
 import { useRouter } from "next/navigation";
 import { formatCoins } from "@/lib/coins";
 import { computeAmmProbability } from "@/lib/probability";
+import { CoinIcon } from "@/components/CoinIcon";
 
 const QUICK_AMOUNTS = [50, 100, 500];
 
@@ -72,7 +73,7 @@ export function PlaceBetForm({
     startTransition(() => { router.refresh(); });
   }
 
-  const yesProb = Math.round(currentProbability);
+  const yesProb = currentProbability;
   const noProb = 100 - yesProb;
 
   return (
@@ -80,7 +81,10 @@ export function PlaceBetForm({
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-sm font-medium text-[var(--muted)]">
           Balance:{" "}
-          <span className="font-mono text-[var(--coin)]">{formatCoins(userBalance)}</span>
+          <span className="inline-flex items-center gap-1 font-mono text-[var(--coin)]">
+            <CoinIcon size={13} />
+            {userBalance.toLocaleString()}
+          </span>
         </p>
       </div>
 
@@ -115,7 +119,7 @@ export function PlaceBetForm({
                 className="text-xl font-extrabold"
                 style={{ color: isYes ? "#22c55e" : "#f97316" }}
               >
-                {prob}%
+                {prob.toFixed(1)}%
               </span>
               <span className="mt-1 text-sm font-semibold text-[var(--text)]">
                 {isYes ? "YES" : "NO"}
@@ -172,16 +176,19 @@ export function PlaceBetForm({
             </div>
             <div className="flex justify-between">
               <span className="text-[var(--muted)]">Max win (if {isYesSelected ? "YES" : "NO"})</span>
-              <span className="font-mono text-[var(--accent)]">{formatCoins(preview.maxWin)}</span>
+              <span className="inline-flex items-center gap-1 font-mono text-[var(--accent)]">
+                <CoinIcon size={13} />
+                {preview.maxWin.toLocaleString()}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-[var(--muted)]">Potential profit</span>
               <span
-                className="font-mono"
+                className="inline-flex items-center gap-1 font-mono"
                 style={{ color: preview.pnl >= 0 ? "#22c55e" : "#f97316" }}
               >
                 {preview.pnl >= 0 ? "+" : ""}
-                {preview.pnl} coins
+                {preview.pnl} <CoinIcon size={13} />
               </span>
             </div>
             <div className="flex justify-between text-xs">
@@ -202,13 +209,11 @@ export function PlaceBetForm({
         disabled={loading || isPending || !selectedOutcomeId || !validAmount}
         className="btn-primary w-full sm:w-auto"
       >
-        {loading
-          ? "Placing…"
-          : isPending
-            ? "Updating…"
-            : validAmount
-              ? `Buy ${isYesSelected ? "YES" : "NO"} · ${amountNum} coins`
-              : "Place bet"}
+        {loading ? "Placing…" : isPending ? "Updating…" : validAmount ? (
+          <span className="inline-flex items-center gap-1.5">
+            Buy {isYesSelected ? "YES" : "NO"} · <CoinIcon size={14} /> {amountNum.toLocaleString()}
+          </span>
+        ) : "Place bet"}
       </button>
     </form>
   );

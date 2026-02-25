@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getOutcomeColors } from "@/lib/outcome-colors";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
+import { CoinIcon } from "@/components/CoinIcon";
 
 const VALID_TABS = ["trending", "sports", "politics", "culture", "crypto", "tech"] as const;
 
@@ -39,11 +40,22 @@ function marketStats(market: Awaited<ReturnType<typeof getMarkets>>[0]) {
   for (const b of market.bets) {
     byOutcome.set(b.outcomeId, (byOutcome.get(b.outcomeId) ?? 0) + b.amount);
   }
-  const outcomeShares = market.outcomes.map((o) => ({
-    ...o,
-    amount: byOutcome.get(o.id) ?? 0,
-    pct: total > 0 ? Math.round(((byOutcome.get(o.id) ?? 0) / total) * 100) : 50,
-  }));
+  // For binary YES/NO markets use AMM currentProbability as the single source of truth.
+  // For multi-choice markets fall back to parimutuel (AMM only tracks a single YES prob).
+  const yesOutcome =
+    market.outcomes.length === 2
+      ? market.outcomes.find((o) => o.label.toLowerCase().startsWith("yes"))
+      : null;
+  const outcomeShares = market.outcomes.map((o) => {
+    const pct = yesOutcome
+      ? o.id === yesOutcome.id
+        ? Math.round(market.currentProbability)
+        : Math.round(100 - market.currentProbability)
+      : total > 0
+        ? Math.round(((byOutcome.get(o.id) ?? 0) / total) * 100)
+        : Math.round(100 / market.outcomes.length);
+    return { ...o, amount: byOutcome.get(o.id) ?? 0, pct };
+  });
   return { total, outcomeShares, resolved: !!market.resolvedOutcomeId };
 }
 
@@ -100,7 +112,11 @@ export default async function MarketsPage({
                   })}
                 </div>
                 <p className="mt-2 text-xs text-[var(--muted)]">
-                  {resolved ? `Resolved: ${winner?.label ?? "—"}` : `Pool: ${total} coins`} ·{" "}
+                  {resolved ? `Resolved: ${winner?.label ?? "—"}` : (
+                    <span className="inline-flex items-center gap-1">
+                      Pool: <CoinIcon size={11} />{total.toLocaleString()}
+                    </span>
+                  )}{" · "}
                   Closes {new Date(market.closesAt).toLocaleDateString()}
                 </p>
               </Link>
