@@ -9,6 +9,8 @@ import { XPBar } from "@/components/XPBar";
 import { getLevelFromXp, getTitle, xpForLevel, xpForPrevLevel } from "@/lib/gamification";
 import { getPortfolioSnapshots } from "@/app/actions/portfolio";
 import { PortfolioPnlChart } from "@/components/PortfolioPnlChart";
+import { PnLCardModal } from "./PnLCardModal";
+import { BetPnLCardModal } from "@/components/BetPnLCardModal";
 
 const TX_LABELS: Record<string, string> = {
   initial: "Welcome bonus",
@@ -38,6 +40,9 @@ async function getPortfolio(userId: string) {
         xp: true,
         level: true,
         eloRating: true,
+        totalTrades: true,
+        totalWins: true,
+        totalLosses: true,
       },
     }),
     // Open positions (not cashed out, market not resolved)
@@ -148,9 +153,9 @@ export default async function PortfolioPage() {
             className="inline-flex items-center gap-2 text-3xl font-mono"
             style={{ color: unrealizedPnl >= 0 ? "#22c55e" : "#f97316" }}
           >
-            {unrealizedPnl >= 0 ? "+" : ""}
+            {unrealizedPnl >= 0 ? "+" : "−"}
             <CoinIcon size={28} />
-            {Math.round(unrealizedPnl)}
+            {Math.abs(Math.round(unrealizedPnl))}
           </p>
         </section>
 
@@ -160,11 +165,25 @@ export default async function PortfolioPage() {
             className="inline-flex items-center gap-2 text-3xl font-mono"
             style={{ color: realizedPnl >= 0 ? "#22c55e" : "#f97316" }}
           >
-            {realizedPnl >= 0 ? "+" : ""}
+            {realizedPnl >= 0 ? "+" : "−"}
             <CoinIcon size={28} />
-            {Math.round(realizedPnl)}
+            {Math.abs(Math.round(realizedPnl))}
           </p>
         </section>
+      </div>
+
+      {/* Share PnL Card */}
+      <div className="flex">
+        <PnLCardModal
+          userName={user.name ?? "Trader"}
+          eloRating={user.eloRating}
+          totalTrades={user.totalTrades}
+          totalWins={user.totalWins}
+          totalLosses={user.totalLosses}
+          realizedPnl={realizedPnl}
+          unrealizedPnl={unrealizedPnl}
+          snapshots={snapshots}
+        />
       </div>
 
       {/* PnL Chart */}
@@ -216,8 +235,8 @@ export default async function PortfolioPage() {
                     className="inline-flex items-center gap-1 font-mono text-sm font-bold"
                     style={{ color: pnl >= 0 ? "#22c55e" : "#f97316" }}
                   >
-                    {pnl >= 0 ? "+" : ""}
-                    <CoinIcon size={13} />{pnl.toFixed(0)}
+                    {pnl >= 0 ? "+" : "−"}
+                    <CoinIcon size={13} />{Math.abs(parseFloat(pnl.toFixed(0))).toLocaleString()}
                   </p>
                   <p className="flex items-center justify-end gap-0.5 text-xs text-[var(--muted)]">
                     <CoinIcon size={10} />{bet.amount.toLocaleString()} spent
@@ -267,7 +286,7 @@ export default async function PortfolioPage() {
                     className="inline-flex items-center gap-1 text-sm font-bold"
                     style={{ color: won ? "#22c55e" : "#f97316" }}
                   >
-                    {won ? <>Won · +<CoinIcon size={13} />{payout.toLocaleString()}</> : "Lost"}
+                    {won ? <>Won · +<CoinIcon size={13} /> {payout.toLocaleString()}</> : "Lost"}
                   </span>
                 </li>
               );
@@ -304,14 +323,23 @@ export default async function PortfolioPage() {
                       {exitProb.toFixed(1)}%
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="flex flex-col items-end gap-1">
                     <p
                       className="inline-flex items-center gap-1 font-mono text-sm font-bold"
                       style={{ color: pnl >= 0 ? "#22c55e" : "#f97316" }}
                     >
-                      {pnl >= 0 ? "+" : ""}<CoinIcon size={13} />{pnl}
+                      {pnl >= 0 ? "+" : "−"}<CoinIcon size={13} />{Math.abs(pnl).toLocaleString()}
                     </p>
                     <p className="text-xs text-[var(--muted)]">Cashed out</p>
+                    <BetPnLCardModal
+                      userName={user.name ?? "Trader"}
+                      marketTitle={bet.market.title}
+                      side={isYes ? "YES" : "NO"}
+                      amount={bet.amount}
+                      entryProbability={bet.entryProbability ?? 50}
+                      exitProb={exitProb}
+                      pnl={pnl}
+                    />
                   </div>
                 </li>
               );

@@ -53,7 +53,7 @@ export function Header() {
           <Link href="/agent" className="btn-ghost text-sm">
             My Agent
           </Link>
-          {status === "loading" ? null : status === "authenticated" ? (
+          {status === "authenticated" ? (
             <>
               <Link href="/portfolio" className="btn-ghost text-sm">
                 Portfolio

@@ -4,13 +4,13 @@
  *
  * SAFETY:
  *  - Only runs when ENABLE_SIMULATION=true
- *  - All bets have isBot=true and never affect real-user balances
- *  - Does NOT create Activity feed entries (keeps live feed clean)
- *  - Does NOT trigger gamification, missions, or notifications
+ *  - All bets flagged isBot=true — never affects real-user balances
+ *  - Does NOT trigger gamification, missions, ELO, or notifications
+ *  - Bot trades DO appear in the Activity feed (human-readable usernames)
  *
  * Usage:
  *   ENABLE_SIMULATION=true npm run simulate
- *   (or add ENABLE_SIMULATION=true to your .env file, then: npm run simulate)
+ *   (or add ENABLE_SIMULATION=true to your .env, then: npm run simulate)
  */
 
 // ─── Safety check — must be first ────────────────────────────────────────────
@@ -22,6 +22,7 @@ if (process.env.ENABLE_SIMULATION !== "true") {
 }
 
 import { PrismaClient } from "@prisma/client";
+import { BOT_STRATEGIES, type BotStrategy } from "./generateBotUsername";
 
 const prisma = new PrismaClient({ log: [] });
 
@@ -36,41 +37,34 @@ function computeAmmProbability(
   return Math.min(99, Math.max(1, current + direction * (amount / liquidity) * 100));
 }
 
-// ─── Bot strategy system ─────────────────────────────────────────────────────
+// ─── Strategy derivation ──────────────────────────────────────────────────────
 //
-//  Strategies are derived from the bot's index number:
-//    bot_001–bot_020  → random          (50/50 side, medium bet)
-//    bot_021–bot_040  → trend_follower  (bets whichever side is currently leading)
-//    bot_041–bot_060  → contrarian      (bets against the leading side)
-//    bot_061–bot_080  → whale           (large infrequent bets, 20% skip chance)
-//    bot_081–bot_100  → conservative    (tiny frequent bets)
+// Strategy is encoded in the bot's email address so no extra DB column is needed:
+//   email = bot_${strategy}_${index}@simulation.internal
+//
+// Example: bot_whale_063@simulation.internal  →  strategy = "whale"
 
-type Strategy = "random" | "trend_follower" | "contrarian" | "whale" | "conservative";
-
-function deriveStrategy(botName: string): Strategy {
-  const num = parseInt(botName.replace("bot_", ""), 10);
-  if (isNaN(num)) return "random";
-  if (num <= 20)  return "random";
-  if (num <= 40)  return "trend_follower";
-  if (num <= 60)  return "contrarian";
-  if (num <= 80)  return "whale";
-  return "conservative";
+function deriveStrategy(email: string): BotStrategy {
+  const match = email.match(/^bot_([a-z_]+)_\d+@simulation\.internal$/);
+  const s = match?.[1] as BotStrategy | undefined;
+  if (s && (BOT_STRATEGIES as readonly string[]).includes(s)) return s;
+  return "random";
 }
 
-function getBetAmount(strategy: Strategy, balance: number): number {
+function getBetAmount(strategy: BotStrategy, balance: number): number {
   const r = Math.random();
   let amount: number;
   switch (strategy) {
-    case "whale":        amount = Math.floor(r * 700) + 300; break; // 300–1,000
-    case "conservative": amount = Math.floor(r *  40) +  10; break; // 10–50
+    case "whale":         amount = Math.floor(r * 700) + 300; break; // 300–1,000
+    case "conservative":  amount = Math.floor(r *  40) +  10; break; //  10–50
     case "trend_follower":
-    case "contrarian":   amount = Math.floor(r * 120) +  30; break; // 30–150
-    default:             amount = Math.floor(r * 150) +  50; break; // 50–200
+    case "contrarian":    amount = Math.floor(r * 120) +  30; break; //  30–150
+    default:              amount = Math.floor(r * 150) +  50; break; //  50–200
   }
   return Math.min(amount, balance);
 }
 
-function getSide(strategy: Strategy, currentYesProb: number): "YES" | "NO" {
+function getSide(strategy: BotStrategy, currentYesProb: number): "YES" | "NO" {
   switch (strategy) {
     case "trend_follower": return currentYesProb >= 50 ? "YES" : "NO";
     case "contrarian":     return currentYesProb >= 50 ? "NO"  : "YES";
@@ -80,17 +74,17 @@ function getSide(strategy: Strategy, currentYesProb: number): "YES" | "NO" {
 
 // ─── Single simulation tick ───────────────────────────────────────────────────
 
-let tickCount = 0;
+let tickCount        = 0;
 let tradesThisMinute = 0;
-let minuteStart = Date.now();
+let minuteStart      = Date.now();
 
 async function tick() {
   const now = new Date();
 
   // Pick a random bot with enough balance
   const bots = await prisma.user.findMany({
-    where: { isBot: true, balance: { gte: 10 } },
-    select: { id: true, name: true, balance: true },
+    where:  { isBot: true, balance: { gte: 10 } },
+    select: { id: true, name: true, email: true, balance: true },
   });
   if (bots.length === 0) {
     console.warn("[SIM] No bots with sufficient balance — consider re-seeding.");
@@ -98,9 +92,14 @@ async function tick() {
   }
   const bot = bots[Math.floor(Math.random() * bots.length)];
 
+  const strategy = deriveStrategy(bot.email);
+
+  // Whales occasionally skip (makes their large bets feel rarer)
+  if (strategy === "whale" && Math.random() < 0.20) return;
+
   // Pick a random open binary market
   const markets = await prisma.market.findMany({
-    where: { resolvedOutcomeId: null, closesAt: { gt: now }, type: "yes_no" },
+    where:   { resolvedOutcomeId: null, closesAt: { gt: now }, type: "yes_no" },
     include: { outcomes: { orderBy: { order: "asc" } } },
   });
   if (markets.length === 0) return;
@@ -110,10 +109,6 @@ async function tick() {
   const yesOutcome = market.outcomes.find(o => o.label.toLowerCase().startsWith("yes"));
   const noOutcome  = market.outcomes.find(o => o.label.toLowerCase().startsWith("no"));
   if (!yesOutcome || !noOutcome) return;
-
-  // Whales occasionally skip a tick (low activity feel)
-  const strategy = deriveStrategy(bot.name);
-  if (strategy === "whale" && Math.random() < 0.20) return;
 
   const side      = getSide(strategy, market.currentProbability);
   const isYes     = side === "YES";
@@ -129,7 +124,7 @@ async function tick() {
   const snapshotNow      = new Date();
 
   const hasExisting = await prisma.bet.findFirst({
-    where: { userId: bot.id, marketId: market.id },
+    where:  { userId: bot.id, marketId: market.id },
     select: { id: true },
   });
 
@@ -160,11 +155,11 @@ async function tick() {
       },
     });
 
-    // Snapshot for probability chart
+    // Probability snapshot for the chart
     await tx.probabilitySnapshot.createMany({
       data: market.outcomes.map(o => ({
-        marketId:   market.id,
-        outcomeId:  o.id,
+        marketId:    market.id,
+        outcomeId:   o.id,
         probability: o.label.toLowerCase().startsWith("yes")
           ? newYesProb / 100
           : (100 - newYesProb) / 100,
@@ -173,26 +168,47 @@ async function tick() {
     });
   });
 
+  // ─── Activity feed entry (shown in live feed with bot's human username) ────
+  await prisma.activity.create({
+    data: {
+      type:        "TRADE",
+      userId:      bot.id,
+      username:    bot.name,       // e.g. "SilentTiger42"
+      marketId:    market.id,
+      marketTitle: market.title,
+      side,
+      amount,
+      price:       entryProbability,
+    },
+  });
+
+  // Trim activity table to 200 most recent rows (same cap as real bets)
+  const toDelete = await prisma.activity.findMany({
+    orderBy: { createdAt: "desc" },
+    skip:    200,
+    select:  { id: true },
+  });
+  if (toDelete.length > 0) {
+    await prisma.activity.deleteMany({ where: { id: { in: toDelete.map(a => a.id) } } });
+  }
+
   tickCount++;
   tradesThisMinute++;
 
-  // Log every trade
-  const shortTitle = market.title.length > 45
-    ? market.title.slice(0, 42) + "…"
+  const shortTitle = market.title.length > 42
+    ? market.title.slice(0, 39) + "…"
     : market.title;
   console.log(
-    `[SIM #${tickCount}] ${bot.name} (${strategy.padEnd(14)}) ` +
-    `bet ${String(amount).padStart(4)} on ${side.padEnd(3)} ` +
-    `@ ${entryProbability.toFixed(1).padStart(4)}% | ` +
-    `"${shortTitle}" → YES ${newYesProb.toFixed(1)}%`,
+    `[SIM #${tickCount}] ${bot.name.padEnd(20)} (${strategy.padEnd(14)}) ` +
+    `bet ${String(amount).padStart(5)} on ${side.padEnd(3)} ` +
+    `@ ${entryProbability.toFixed(1).padStart(4)}% | "${shortTitle}"`,
   );
 
-  // Print trades-per-minute stat every 60 seconds
-  const elapsed = Date.now() - minuteStart;
-  if (elapsed >= 60_000) {
+  // Trades-per-minute stat every 60 s
+  if (Date.now() - minuteStart >= 60_000) {
     console.log(`\n[SIM] ${tradesThisMinute} trades in the last minute\n`);
     tradesThisMinute = 0;
-    minuteStart = Date.now();
+    minuteStart      = Date.now();
   }
 }
 
@@ -213,7 +229,8 @@ process.on("SIGINT", () => {
   console.log("🤖 Winzen Simulation Engine");
   console.log(`   Active YES/NO markets : ${marketCount}`);
   console.log(`   Bot users             : ${botCount}`);
-  console.log(`   Interval              : 1–3 seconds`);
+  console.log(`   Interval              : 1–3 s`);
+  console.log(`   Activity feed         : enabled (bot names show as human traders)`);
   console.log("   Press Ctrl+C to stop.\n");
 
   if (botCount === 0) {
@@ -222,7 +239,7 @@ process.on("SIGINT", () => {
     process.exit(1);
   }
   if (marketCount === 0) {
-    console.warn("⚠️  No open markets. Create some markets first.");
+    console.warn("⚠️  No open markets found — create some first.");
   }
 
   while (running) {
@@ -232,7 +249,7 @@ process.on("SIGINT", () => {
       console.error("[SIM] Tick error:", err);
     }
     if (!running) break;
-    const delay = Math.floor(Math.random() * 2_000) + 1_000; // 1–3 s
+    const delay = Math.floor(Math.random() * 2_000) + 1_000;
     await new Promise(r => setTimeout(r, delay));
   }
 

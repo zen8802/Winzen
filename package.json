@@ -13,12 +13,14 @@
     "db:migrate-positions": "tsx prisma/migrate-positions.ts",
     "db:seed-admin": "tsx prisma/seed-admin.ts",
     "simulate:seed": "tsx scripts/seedBots.ts",
+    "simulate:migrate": "tsx scripts/migrateBotNames.ts",
     "simulate": "tsx scripts/runSimulation.ts",
     "cleanup:bots": "tsx scripts/cleanupSimulation.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
+    "html2canvas": "^1.4.1",
     "next": "14.2.18",
     "next-auth": "^4.24.10",
     "react": "^18.3.1",

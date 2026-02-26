@@ -23,29 +23,29 @@ export function ActivityFeed() {
     // Fixed overlay — completely outside document flow, never affects layout
     <div
       className="pointer-events-none fixed right-5 top-20 hidden select-none xl:block"
-      style={{ width: 176, maxHeight: "calc(100vh - 100px)", overflow: "hidden" }}
+      style={{ width: 160, overflow: "hidden" }}
       aria-hidden="true"
     >
-      {/* Padding-bottom reserves room so items don't poke through the fade */}
-      <div className="relative pb-20">
-        <ul className="space-y-4">
-          {items.slice(0, 18).map((item, idx) => {
-            // Items get progressively less visible as they age down the list
-            const agingOpacity = Math.max(0.08, 0.55 - idx * 0.035);
+      <div className="relative pb-12">
+        <ul className="space-y-3">
+          {items.slice(0, 5).map((item, idx) => {
+            // Gentle fade: newest = 0.65, oldest = ~0.15
+            const agingOpacity = Math.max(0.1, 0.65 - idx * 0.13);
+            // Truncate name to 10 chars so the gradient ellipsis is visible
+            const rawName = item.username ?? "Someone";
+            const displayName = rawName.length > 10 ? rawName.slice(0, 9) + "…" : rawName;
 
             return (
-              // Outer li controls age-based opacity
               <li key={item.id} style={{ opacity: agingOpacity }}>
-                {/* Inner div carries the entrance animation — opacity multiplies */}
                 <div
                   style={{
-                    animation: `activityFadeIn 0.45s ease ${Math.min(idx * 25, 300)}ms both`,
+                    animation: `activityFadeIn 0.45s ease ${Math.min(idx * 25, 200)}ms both`,
                   }}
                 >
                   {item.type === "TRADE" ? (
-                    <div className="flex items-center gap-1 overflow-hidden text-[11px] font-medium leading-snug">
-                      <span
-                        className="shrink-0"
+                    <div className="text-[10px] font-medium leading-snug">
+                      {/* Name on its own line — always fits */}
+                      <p
                         style={{
                           background: "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)",
                           WebkitBackgroundClip: "text",
@@ -53,23 +53,22 @@ export function ActivityFeed() {
                           backgroundClip: "text",
                         }}
                       >
-                        {item.username ?? "Someone"}
-                      </span>
-                      <span className="shrink-0" style={{ color: "var(--muted)" }}>bet</span>
-                      <CoinIcon size={9} />
-                      <span className="shrink-0" style={{ color: "var(--muted)" }}>
-                        {item.amount?.toLocaleString()}
-                      </span>
-                      <span className="shrink-0" style={{ color: "var(--muted)" }}>on</span>
-                      <span
-                        className="shrink-0"
-                        style={{ color: item.side === "YES" ? "#22c55e" : "#60a5fa" }}
-                      >
-                        {item.side} @ {item.price?.toFixed(0)}%
-                      </span>
+                        {displayName}
+                      </p>
+                      {/* Compact trade summary */}
+                      <p className="inline-flex items-center gap-0.5 mt-px">
+                        <CoinIcon size={8} />
+                        <span style={{ color: "var(--muted)" }}>
+                          {item.amount?.toLocaleString()}
+                        </span>
+                        <span style={{ color: "var(--muted)" }}> · </span>
+                        <span style={{ color: item.side === "YES" ? "#22c55e" : "#60a5fa" }}>
+                          {item.side} @ {item.price?.toFixed(0)}%
+                        </span>
+                      </p>
                     </div>
                   ) : (
-                    <p className="text-[11px] font-medium leading-snug" style={{ color: "var(--muted)" }}>
+                    <p className="text-[10px] font-medium leading-snug" style={{ color: "var(--muted)" }}>
                       Resolved →{" "}
                       <span style={{ color: item.side === "YES" ? "#22c55e" : "#60a5fa" }}>
                         {item.side}
@@ -77,7 +76,7 @@ export function ActivityFeed() {
                     </p>
                   )}
                   <p
-                    className="mt-0.5 truncate text-[10px] leading-snug"
+                    className="mt-px truncate text-[9px] leading-snug"
                     style={{ color: "var(--muted)" }}
                   >
                     {item.marketTitle}
@@ -88,11 +87,11 @@ export function ActivityFeed() {
           })}
         </ul>
 
-        {/* Soft fade — items dissolve into the page background */}
+        {/* Soft fade — items dissolve into page background */}
         <div
           className="pointer-events-none absolute bottom-0 left-0 right-0"
           style={{
-            height: 96,
+            height: 56,
             background: "linear-gradient(to bottom, transparent, var(--bg))",
           }}
         />
