@@ -24,6 +24,7 @@ model User {
   totalWins     Int       @default(0) // markets resolved in user's favour
   totalLosses   Int       @default(0) // markets resolved against user
   totalProfit   Int       @default(0) // net coins gained/lost from resolved markets
+  isBot         Boolean   @default(false)   // true = simulation bot, never a real user
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -148,6 +149,7 @@ model Bet {
   shares           Float?    // amount / entryProbability
   closedAt         DateTime? // set on cash-out (early exit)
   exitProbability  Float?    // probability of chosen outcome at cash-out (1–99 scale)
+  isBot            Boolean   @default(false) // true = placed by a simulation bot
 
   createdAt DateTime @default(now())
 

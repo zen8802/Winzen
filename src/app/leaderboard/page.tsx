@@ -11,7 +11,7 @@ const RANK_STYLES: Record<number, { border: string; bg: string; glow: string }> 
 
 export default async function LeaderboardPage() {
   const users = await prisma.user.findMany({
-    where: { OR: [{ totalTrades: { gt: 0 } }, { totalWins: { gt: 0 } }] },
+    where: { isBot: false, OR: [{ totalTrades: { gt: 0 } }, { totalWins: { gt: 0 } }] },
     select: {
       id: true,
       name: true,
