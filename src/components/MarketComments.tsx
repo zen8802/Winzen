@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, memo } from "react";
+import Link from "next/link";
 import { postComment } from "@/app/actions/comments";
 import type { CommentRow } from "@/app/actions/comments";
 
@@ -19,7 +20,16 @@ const CommentItem = memo(function CommentItem({ comment }: { comment: CommentRow
   return (
     <li className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
       <div className="flex items-baseline gap-2">
-        <span className="text-sm font-semibold text-[var(--text)]">{comment.username}</span>
+        {comment.userId ? (
+          <Link
+            href={`/users/${comment.userId}`}
+            className="text-sm font-semibold text-[var(--text)] hover:text-[var(--accent)] transition-colors"
+          >
+            {comment.username}
+          </Link>
+        ) : (
+          <span className="text-sm font-semibold text-[var(--text)]">{comment.username}</span>
+        )}
         <span className="text-xs text-[var(--muted)]">{timeAgo(comment.createdAt)}</span>
       </div>
       <p className="mt-1 text-sm leading-relaxed text-[var(--text)]">{comment.content}</p>
@@ -33,7 +43,6 @@ export function MarketComments({
   isSignedIn,
 }: {
   marketId: string;
-  // Server passes newest-first; we display oldest-first (natural chat order)
   initialComments: CommentRow[];
   isSignedIn: boolean;
 }) {
@@ -54,10 +63,10 @@ export function MarketComments({
       setError("");
       setLoading(true);
 
-      // Optimistic update — shown immediately, rolled back on error
       const optimisticId = `opt-${Date.now()}`;
       const optimistic: CommentRow = {
         id: optimisticId,
+        userId: "",
         username: "You",
         content: text,
         createdAt: new Date().toISOString(),
@@ -73,7 +82,6 @@ export function MarketComments({
       setLoading(false);
 
       if (result.error) {
-        // Roll back and restore draft
         setComments((prev) => prev.filter((c) => c.id !== optimisticId));
         setContent(text);
         setError(result.error);
@@ -88,7 +96,6 @@ export function MarketComments({
         Comments {comments.length > 0 && <span className="text-[var(--muted)]">({comments.length})</span>}
       </h2>
 
-      {/* Input */}
       {isSignedIn ? (
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
@@ -114,7 +121,6 @@ export function MarketComments({
 
       {error && <p className="text-xs text-red-400">{error}</p>}
 
-      {/* Comment list */}
       <ul className="space-y-3">
         {comments.map((c) => (
           <CommentItem key={c.id} comment={c} />

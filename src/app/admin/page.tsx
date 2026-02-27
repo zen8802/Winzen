@@ -35,9 +35,14 @@ export default async function AdminPage() {
             {markets.length} unresolved market{markets.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Link href="/" className="btn-ghost text-sm">
-          ← Back to home
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/admin/sim" className="btn-ghost text-sm">
+            Sim Monitor →
+          </Link>
+          <Link href="/" className="btn-ghost text-sm">
+            ← Back to home
+          </Link>
+        </div>
       </div>
 
       <ul className="space-y-4">

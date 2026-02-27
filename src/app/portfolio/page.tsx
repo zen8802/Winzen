@@ -136,25 +136,25 @@ export default async function PortfolioPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <section className="card">
           <p className="text-sm text-[var(--muted)]">Balance</p>
-          <p className="inline-flex items-center gap-2 text-3xl font-mono text-[var(--coin)]">
-            <CoinIcon size={28} />
+          <p className="inline-flex items-center gap-2 text-2xl sm:text-3xl font-mono text-[var(--coin)]">
+            <CoinIcon size={24} />
             {user.balance.toLocaleString()}
           </p>
         </section>
 
         <section className="card">
           <p className="text-sm text-[var(--muted)]">ELO Rating</p>
-          <p className="text-3xl font-mono text-[var(--accent)]">{user.eloRating}</p>
+          <p className="text-2xl sm:text-3xl font-mono text-[var(--accent)]">{user.eloRating}</p>
         </section>
 
         <section className="card">
           <p className="text-sm text-[var(--muted)]">Unrealized PnL</p>
           <p
-            className="inline-flex items-center gap-2 text-3xl font-mono"
+            className="inline-flex items-center gap-2 text-2xl sm:text-3xl font-mono"
             style={{ color: unrealizedPnl >= 0 ? "#22c55e" : "#f97316" }}
           >
             {unrealizedPnl >= 0 ? "+" : "−"}
-            <CoinIcon size={28} />
+            <CoinIcon size={24} />
             {Math.abs(Math.round(unrealizedPnl))}
           </p>
         </section>
@@ -162,11 +162,11 @@ export default async function PortfolioPage() {
         <section className="card">
           <p className="text-sm text-[var(--muted)]">Realized PnL</p>
           <p
-            className="inline-flex items-center gap-2 text-3xl font-mono"
+            className="inline-flex items-center gap-2 text-2xl sm:text-3xl font-mono"
             style={{ color: realizedPnl >= 0 ? "#22c55e" : "#f97316" }}
           >
             {realizedPnl >= 0 ? "+" : "−"}
-            <CoinIcon size={28} />
+            <CoinIcon size={24} />
             {Math.abs(Math.round(realizedPnl))}
           </p>
         </section>
@@ -210,9 +210,9 @@ export default async function PortfolioPage() {
             return (
               <li
                 key={bet.id}
-                className="card flex items-center justify-between gap-4"
+                className="card flex flex-wrap items-start justify-between gap-3"
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <Link
                     href={`/markets/${bet.market.id}`}
                     className="font-medium text-[var(--text)] hover:text-[var(--accent)]"
@@ -230,7 +230,7 @@ export default async function PortfolioPage() {
                     {shares.toFixed(3)} shares
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <p
                     className="inline-flex items-center gap-1 font-mono text-sm font-bold"
                     style={{ color: pnl >= 0 ? "#22c55e" : "#f97316" }}

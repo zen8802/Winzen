@@ -5,6 +5,7 @@ import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { StreakBanner } from "@/components/StreakBanner";
 import { DailyMissions } from "@/components/DailyMissions";
 import { CoinIcon } from "@/components/CoinIcon";
+import { MarketImage } from "@/components/MarketImage";
 const VALID_TABS = ["trending", "sports", "politics", "culture", "crypto", "tech"] as const;
 
 async function getMarkets(tab: string | null) {
@@ -139,7 +140,13 @@ export default async function HomePage({
 
               return (
                 <li key={market.id}>
-                  <Link href={`/markets/${market.id}`} className="card block">
+                  <Link href={`/markets/${market.id}`} className="card block overflow-hidden !p-0 group">
+                    <MarketImage
+                      imageUrl={market.imageUrl}
+                      category={market.category}
+                      alt={market.title}
+                    />
+                    <div className="p-4">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       <span className="rounded bg-[var(--logo)]/20 px-2 py-0.5 text-xs font-medium capitalize text-[var(--logo)]">
                         {market.category}
@@ -192,6 +199,7 @@ export default async function HomePage({
                       )}{" · "}
                       Closes {new Date(market.closesAt).toLocaleDateString()}
                     </p>
+                    </div>
                   </Link>
                 </li>
               );

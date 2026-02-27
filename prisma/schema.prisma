@@ -101,6 +101,7 @@ model Market {
   id                 String    @id @default(cuid())
   title              String
   description        String?
+  imageUrl           String?   // optional custom cover image URL
   type               String    // "yes_no" | "multiple_choice"
   category           String    @default("culture") // "sports" | "politics" | "culture" | "crypto" | "tech"
   creatorDeposit     Int       @default(0) // 100 coins deducted at creation, refunded if eligible

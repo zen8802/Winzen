@@ -11,6 +11,7 @@ import { MarketComments } from "@/components/MarketComments";
 import { getMarketSnapshots, getUserBetPosition } from "@/app/actions/charts";
 import { getComments } from "@/app/actions/comments";
 import { CoinIcon } from "@/components/CoinIcon";
+import { MarketImage } from "@/components/MarketImage";
 import Link from "next/link";
 
 async function getMarket(id: string) {
@@ -124,10 +125,20 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
               resolved={resolved}
             />
           </div>
-          <h1 className="text-2xl font-bold">{market.title}</h1>
-          {market.description && (
-            <p className="mt-2 text-[var(--muted)]">{market.description}</p>
-          )}
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl font-bold">{market.title}</h1>
+              {market.description && (
+                <p className="mt-2 text-[var(--muted)]">{market.description}</p>
+              )}
+            </div>
+            <MarketImage
+              imageUrl={market.imageUrl}
+              category={market.category}
+              alt={market.title}
+              variant="thumb"
+            />
+          </div>
           <p className="mt-2 text-xs text-[var(--muted)]">
             Closes {new Date(market.closesAt).toLocaleString()}
             {resolved &&
@@ -136,16 +147,16 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         </div>
 
         {/* Current Probability Display */}
-        <div className="flex items-center gap-6 rounded-xl border border-[var(--border)] bg-white/[0.02] p-4">
+        <div className="flex items-center gap-3 sm:gap-6 rounded-xl border border-[var(--border)] bg-white/[0.02] p-4">
           <div className="flex-1 text-center">
-            <p className="text-3xl font-extrabold text-green-400">{yesProb.toFixed(1)}%</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-green-400">{yesProb.toFixed(1)}%</p>
             <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               YES
             </p>
           </div>
           <div className="h-12 w-px bg-[var(--border)]" />
           <div className="flex-1 text-center">
-            <p className="text-3xl font-extrabold text-orange-400">{noProb.toFixed(1)}%</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-orange-400">{noProb.toFixed(1)}%</p>
             <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               NO
             </p>
@@ -192,9 +203,9 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
               {userOpenBets.map((pos) => (
                 <li
                   key={pos.id}
-                  className="flex items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-white/[0.02] px-4 py-3"
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-white/[0.02] px-4 py-3"
                 >
-                  <div className="space-y-0.5">
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <p
                       className="font-semibold"
                       style={{ color: pos.isYes ? "#22c55e" : "#f97316" }}

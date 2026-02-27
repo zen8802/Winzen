@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 
 export type CommentRow = {
   id: string;
+  userId: string;
   username: string;
   content: string;
   createdAt: string; // ISO string
@@ -16,7 +17,7 @@ export async function getComments(marketId: string): Promise<CommentRow[]> {
     where: { marketId },
     orderBy: { createdAt: "desc" },
     take: 50,
-    select: { id: true, username: true, content: true, createdAt: true },
+    select: { id: true, userId: true, username: true, content: true, createdAt: true },
   });
   return rows.map((r) => ({
     ...r,

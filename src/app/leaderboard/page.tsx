@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { CoinIcon } from "@/components/CoinIcon";
 
@@ -46,9 +47,10 @@ export default async function LeaderboardPage() {
             const style = RANK_STYLES[idx];
 
             return (
-              <div
+              <Link
                 key={user.id}
-                className="flex items-center gap-4 rounded-xl border px-5 py-4 transition"
+                href={`/users/${user.id}`}
+                className="flex items-center gap-4 rounded-xl border px-5 py-4 transition hover:opacity-80"
                 style={
                   style
                     ? {
@@ -80,7 +82,7 @@ export default async function LeaderboardPage() {
                   </p>
                 </div>
 
-                {/* Accuracy */}
+                {/* Accuracy — hidden on mobile */}
                 {accuracy !== null && (
                   <div className="hidden text-right sm:block">
                     <p className="text-sm font-semibold text-[var(--text)]">
@@ -102,7 +104,7 @@ export default async function LeaderboardPage() {
                   </p>
                   <p className="text-xs text-[var(--muted)]">profit</p>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

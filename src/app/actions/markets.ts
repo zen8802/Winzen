@@ -26,6 +26,7 @@ import { computeEloUpdate } from "@/lib/elo";
 const createMarketSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
+  imageUrl: z.string().url().optional(),
   type: z.enum(["yes_no", "multiple_choice"]),
   category: z.enum(["sports", "politics", "culture", "crypto", "tech"]).default("culture"),
   closesAt: z.string().datetime(),
@@ -36,9 +37,11 @@ export async function createMarket(formData: FormData) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return { error: "Not signed in" };
 
+  const imageUrlRaw = (formData.get("imageUrl") as string | null) ?? "";
   const raw = {
     title: formData.get("title"),
     description: formData.get("description") || undefined,
+    imageUrl: imageUrlRaw.trim() || undefined,
     type: formData.get("type"),
     category: formData.get("category") || "culture",
     closesAt: formData.get("closesAt"),
@@ -48,7 +51,7 @@ export async function createMarket(formData: FormData) {
   const parsed = createMarketSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
-  const { title, description, type, category, closesAt, outcomes } = parsed.data;
+  const { title, description, imageUrl, type, category, closesAt, outcomes } = parsed.data;
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -75,6 +78,7 @@ export async function createMarket(formData: FormData) {
       data: {
         title,
         description: description ?? null,
+        imageUrl: imageUrl ?? null,
         type,
         category,
         creatorDeposit: CREATOR_DEPOSIT,

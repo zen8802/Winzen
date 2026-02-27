@@ -7,7 +7,7 @@ import { formatCoins } from "@/lib/coins";
 import { computeAmmProbability } from "@/lib/probability";
 import { CoinIcon } from "@/components/CoinIcon";
 
-const QUICK_AMOUNTS = [50, 100, 500];
+const QUICK_AMOUNTS = [100, 500, 1000];
 
 export function PlaceBetForm({
   marketId,
@@ -101,7 +101,7 @@ export function PlaceBetForm({
               key={outcome.id}
               type="button"
               onClick={() => setSelectedOutcomeId(outcome.id)}
-              className="flex flex-col items-center rounded-xl border-2 p-4 text-center transition-all hover:opacity-90"
+              className="flex flex-col items-center rounded-xl border-2 p-3 sm:p-4 text-center transition-all hover:opacity-90"
               style={{
                 borderColor: isSelected
                   ? isYes
@@ -164,7 +164,7 @@ export function PlaceBetForm({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="e.g. 100"
-          className="w-full max-w-[200px] rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono text-[var(--text)] outline-none focus:border-[var(--accent)]"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono text-[var(--text)] outline-none focus:border-[var(--accent)]"
         />
 
         {/* Preview */}
@@ -194,7 +194,16 @@ export function PlaceBetForm({
             <div className="flex justify-between text-xs">
               <span className="text-[var(--muted)]">Price impact</span>
               <span className="font-mono text-[var(--muted)]">
-                {currentProbability.toFixed(1)}% → {preview.newYesProb.toFixed(1)}% YES
+                {currentProbability.toFixed(1)}% → {preview.newYesProb.toFixed(1)}% YES{" "}
+                <span
+                  style={{
+                    color:
+                      preview.newYesProb > currentProbability ? "#22c55e" : "#f97316",
+                  }}
+                >
+                  ({preview.newYesProb > currentProbability ? "+" : ""}
+                  {(preview.newYesProb - currentProbability).toFixed(1)}pp)
+                </span>
               </span>
             </div>
           </div>

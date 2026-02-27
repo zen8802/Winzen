@@ -61,24 +61,42 @@ export function NotificationBell() {
   const { data: session, status } = useSession();
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const prevUnreadRef = useRef(-1); // -1 = first fetch not yet done
 
   const unread = notifications.filter((n) => !n.isRead).length;
 
-  async function fetch() {
+  async function fetchData() {
     const data = await getNotifications();
+    const newUnread = data.filter((n) => !n.isRead).length;
+
+    // Show toast only on subsequent polls (not page load) when count goes up
+    if (prevUnreadRef.current >= 0 && newUnread > prevUnreadRef.current) {
+      const first = data.find((n) => !n.isRead);
+      setToast(first?.message ?? "You have new notifications");
+    }
+    prevUnreadRef.current = newUnread;
     setNotifications(data);
   }
 
-  // Fetch on mount + every 30s
+  // Auto-dismiss toast after 4s
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  // Mount + poll every 15s
   useEffect(() => {
     if (status !== "authenticated") return;
-    fetch();
-    const id = setInterval(fetch, 30_000);
+    fetchData();
+    const id = setInterval(fetchData, 15_000);
     return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session?.user?.id]);
 
-  // Close on outside click
+  // Close dropdown on outside click
   useEffect(() => {
     if (!isOpen) return;
     function onDown(e: MouseEvent) {
@@ -93,7 +111,6 @@ export function NotificationBell() {
     setIsOpen(opening);
     if (opening && unread > 0) {
       const ids = notifications.filter((n) => !n.isRead).map((n) => n.id);
-      // Optimistic mark-read
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       await markNotificationsRead(ids);
     }
@@ -102,42 +119,62 @@ export function NotificationBell() {
   if (status !== "authenticated") return null;
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={handleToggle}
-        className="relative rounded-lg p-2 text-[var(--muted)] transition hover:bg-white/5 hover:text-[var(--text)]"
-        aria-label="Notifications"
-      >
-        {/* Bell icon */}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
-        {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--logo)] text-[9px] font-bold text-white">
-            {unread > 9 ? "9+" : unread}
-          </span>
-        )}
-      </button>
-
-      {isOpen && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-xl">
-          <div className="border-b border-[var(--border)] px-4 py-3">
-            <p className="text-sm font-semibold text-[var(--text)]">Notifications</p>
-          </div>
-          <div className="max-h-80 overflow-y-auto">
-            {notifications.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-[var(--muted)]">
-                No notifications yet
-              </p>
-            ) : (
-              notifications.map((n) => (
-                <NotificationItem key={n.id} n={n} onClose={() => setIsOpen(false)} />
-              ))
-            )}
+    <>
+      {/* Toast banner — appears when new notifications arrive between polls */}
+      {toast && (
+        <div
+          className="fixed left-1/2 top-20 z-[200] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 cursor-pointer"
+          onClick={() => setToast(null)}
+        >
+          <div className="flex items-start gap-3 rounded-xl border border-[var(--logo)]/40 bg-[var(--surface)] px-4 py-3 shadow-xl">
+            <span className="mt-0.5 shrink-0">🔔</span>
+            <p className="min-w-0 flex-1 text-sm leading-snug text-[var(--text)]">{toast}</p>
+            <button
+              className="shrink-0 text-[var(--muted)] hover:text-[var(--text)]"
+              onClick={(e) => { e.stopPropagation(); setToast(null); }}
+            >
+              ✕
+            </button>
           </div>
         </div>
       )}
-    </div>
+
+      <div className="relative" ref={ref}>
+        <button
+          onClick={handleToggle}
+          className="relative rounded-lg p-2 text-[var(--muted)] transition hover:bg-white/5 hover:text-[var(--text)]"
+          aria-label="Notifications"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          {unread > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--logo)] text-[9px] font-bold text-white">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </button>
+
+        {isOpen && (
+          <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-xl">
+            <div className="border-b border-[var(--border)] px-4 py-3">
+              <p className="text-sm font-semibold text-[var(--text)]">Notifications</p>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-[var(--muted)]">
+                  No notifications yet
+                </p>
+              ) : (
+                notifications.map((n) => (
+                  <NotificationItem key={n.id} n={n} onClose={() => setIsOpen(false)} />
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

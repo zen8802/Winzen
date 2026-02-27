@@ -21,6 +21,7 @@ export default function NewMarketPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [type, setType] = useState<"yes_no" | "multiple_choice">("yes_no");
   const [category, setCategory] = useState<"sports" | "politics" | "culture" | "crypto" | "tech">("culture");
   const [closesAt, setClosesAt] = useState(defaultCloses());
@@ -53,6 +54,7 @@ export default function NewMarketPage() {
     const formData = new FormData();
     formData.set("title", title.trim());
     formData.set("description", description.trim());
+    formData.set("imageUrl", imageUrl.trim());
     formData.set("type", type);
     formData.set("category", category);
     formData.set("closesAt", new Date(closesAt).toISOString());
@@ -109,6 +111,31 @@ export default function NewMarketPage() {
             rows={3}
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--text)] outline-none focus:border-[var(--accent)]"
           />
+        </div>
+        <div>
+          <label htmlFor="imageUrl" className="mb-1 block text-sm text-[var(--muted)]">
+            Cover image URL{" "}
+            <span className="text-xs opacity-60">(optional — paste any image link)</span>
+          </label>
+          <input
+            id="imageUrl"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            placeholder="https://example.com/image.jpg"
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--text)] outline-none focus:border-[var(--accent)]"
+          />
+          {imageUrl.trim() && (
+            <div className="mt-2 overflow-hidden rounded-lg border border-[var(--border)]" style={{ aspectRatio: "16/9" }}>
+              <img
+                src={imageUrl.trim()}
+                alt="Preview"
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.opacity = "0.2";
+                }}
+              />
+            </div>
+          )}
         </div>
         <div>
           <label className="mb-2 block text-sm text-[var(--muted)]">Category</label>
