@@ -56,28 +56,30 @@ model UserMissionProgress {
 }
 
 model UserAgent {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  gender              String   // "male" | "female"
-  equippedHeadwareId  String?
-  equippedShirtId     String?
-  equippedPantsId     String?
-  equippedShoesId     String?
-  equippedAccessoryId String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                       String   @id @default(cuid())
+  userId                   String   @unique
+  equippedSkinId           String?
+  equippedEyesId           String?
+  equippedMouthId          String?
+  equippedHairId           String?
+  equippedTopId            String?
+  equippedBottomId         String?
+  equippedShoesId          String?
+  equippedHatId            String?
+  equippedAccessoryFrontId String?
+  equippedAccessoryBackId  String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AgentItem {
   id        String   @id @default(cuid())
-  category  String   // "headware" | "shirt" | "pants" | "shoes" | "accessories"
+  category  String   // "skin"|"eyes"|"mouth"|"hair"|"top"|"bottom"|"shoes"|"hat"|"accessory_front"|"accessory_back"
   name      String
   price     Int
-  gender    String   @default("unisex") // "unisex" | "male" | "female"
-  icon      String?  // optional icon/thumbnail url
-  color     String?  // optional hex color for display on mannequin (e.g. shirts)
+  icon      String?  // path to PNG: /avatar/items/[category]/[name].png
   order     Int      @default(0)
   createdAt DateTime @default(now())
 

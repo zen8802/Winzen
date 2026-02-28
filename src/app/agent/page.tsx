@@ -4,96 +4,57 @@ import { authOptions } from "@/lib/auth";
 import { getAgentWithItems } from "@/app/actions/agent";
 import { AgentShop } from "./AgentShop";
 import { AgentCollection } from "./AgentCollection";
-import { MannequinViewer } from "./MannequinViewer";
+import { Avatar } from "@/components/Avatar";
+import { AVATAR_CATEGORIES } from "@/lib/avatar";
 
 export default async function AgentPage() {
   const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    redirect("/login");
-  }
+  if (!session?.user) redirect("/login");
 
   const data = await getAgentWithItems();
   if (!data) redirect("/login");
 
-  const { agent, items, ownedIds, equippedHeadwareColor, equippedShirtColor, equippedPantsColor, equippedShoesColor, equippedAccessoryColor } = data;
-  const gender = (agent?.gender === "female" ? "female" : "male") as "male" | "female";
-  const needsGender = !agent;
+  const { items, ownedIds, equipped } = data;
 
   const ownedItems = items.filter((i) => ownedIds.has(i.id));
-  const ownedByCategory = {
-    headware: ownedItems.filter((i) => i.category === "headware"),
-    shirt: ownedItems.filter((i) => i.category === "shirt"),
-    pants: ownedItems.filter((i) => i.category === "pants"),
-    shoes: ownedItems.filter((i) => i.category === "shoes"),
-    accessories: ownedItems.filter((i) => i.category === "accessories"),
-  };
-
-  const categories = [
-    { id: "headware", label: "Headware" },
-    { id: "shirt", label: "Shirt" },
-    { id: "pants", label: "Pants" },
-    { id: "shoes", label: "Shoes" },
-    { id: "accessories", label: "Accessories" },
-  ] as const;
+  const ownedByCategory = Object.fromEntries(
+    AVATAR_CATEGORIES.map((cat) => [cat, ownedItems.filter((i) => i.category === cat)])
+  );
 
   return (
     <div className="space-y-8">
       <section>
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--text)]">
-          My Agent
-        </h1>
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--text)]">My Agent</h1>
         <p className="mt-2 text-[var(--muted)]">
-          Customize your avatar. Earn coins from prediction markets to buy items.
+          Customize your character. Earn coins from prediction markets to buy items.
         </p>
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-[340px_1fr]">
-        <div className="flex flex-col">
-          <MannequinViewer
-            gender={gender as "male" | "female"}
-            headwareColor={equippedHeadwareColor}
-            shirtColor={equippedShirtColor}
-            pantsColor={equippedPantsColor}
-            shoesColor={equippedShoesColor}
-            accessoryColor={equippedAccessoryColor}
-          />
-          {needsGender && (
-            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-              <p className="text-sm text-amber-200">
-                Pick your gender to personalize your mannequin.
-              </p>
-            </div>
-          )}
+      <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
+        {/* Avatar display */}
+        <div className="flex flex-col items-center gap-4">
+          <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--surface)] to-[var(--bg)] p-6">
+            <Avatar equipped={equipped} size="xl" animate />
+          </div>
+          <p className="text-xs text-[var(--muted)]">Idle animation · breathes + blinks</p>
         </div>
 
-        <div className="space-y-6">
+        {/* Right column */}
+        <div className="space-y-6 min-w-0">
           {ownedItems.length > 0 && (
             <AgentCollection
               ownedByCategory={ownedByCategory}
-              equipped={{
-                headware: agent?.equippedHeadwareId ?? null,
-                shirt: agent?.equippedShirtId ?? null,
-                pants: agent?.equippedPantsId ?? null,
-                shoes: agent?.equippedShoesId ?? null,
-                accessories: agent?.equippedAccessoryId ?? null,
-              }}
+              equipped={equipped}
             />
           )}
+
           <section>
-            <h2 className="mb-4 text-lg font-semibold text-[var(--text)]">Buy clothes</h2>
-          <AgentShop
-            categories={categories}
-            items={items}
-            ownedIds={ownedIds}
-            equipped={{
-              headware: agent?.equippedHeadwareId ?? null,
-              shirt: agent?.equippedShirtId ?? null,
-              pants: agent?.equippedPantsId ?? null,
-              shoes: agent?.equippedShoesId ?? null,
-              accessories: agent?.equippedAccessoryId ?? null,
-            }}
-            needsGender={needsGender}
-          />
+            <h2 className="mb-4 text-lg font-semibold text-[var(--text)]">Shop</h2>
+            <AgentShop
+              items={items}
+              ownedIds={ownedIds}
+              equipped={equipped}
+            />
           </section>
         </div>
       </div>

@@ -46,7 +46,8 @@ export function PlaceBetForm({
     const entryProb = isYesSelected ? newYesProb : 100 - newYesProb;
     const shares = amountNum / entryProb;
     const maxWin = Math.floor(shares * 100);
-    return { newYesProb, entryProb, shares, maxWin, pnl: maxWin - amountNum };
+    const multiplier = 100 / entryProb;
+    return { newYesProb, entryProb, shares, maxWin, pnl: maxWin - amountNum, multiplier };
   }, [validAmount, amountNum, isYesSelected, currentProbability, liquidity]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -121,6 +122,12 @@ export function PlaceBetForm({
               >
                 {prob.toFixed(1)}%
               </span>
+              <span
+                className="mt-0.5 text-xs font-semibold"
+                style={{ color: isYes ? "rgba(34,197,94,0.6)" : "rgba(249,115,22,0.6)" }}
+              >
+                {(100 / prob).toFixed(2)}×
+              </span>
               <span className="mt-1 text-sm font-semibold text-[var(--text)]">
                 {isYes ? "YES" : "NO"}
               </span>
@@ -175,20 +182,29 @@ export function PlaceBetForm({
               <span className="font-mono text-[var(--text)]">{preview.shares.toFixed(3)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[var(--muted)]">Max win (if {isYesSelected ? "YES" : "NO"})</span>
+              <span className="text-[var(--muted)]">Multiplier</span>
+              <span
+                className="font-mono font-bold"
+                style={{ color: isYesSelected ? "#22c55e" : "#f97316" }}
+              >
+                {preview.multiplier.toFixed(2)}×
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Max payout</span>
               <span className="inline-flex items-center gap-1 font-mono text-[var(--accent)]">
                 <CoinIcon size={13} />
                 {preview.maxWin.toLocaleString()}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[var(--muted)]">Potential profit</span>
+              <span className="text-[var(--muted)]">Profit if {isYesSelected ? "YES" : "NO"}</span>
               <span
                 className="inline-flex items-center gap-1 font-mono"
                 style={{ color: preview.pnl >= 0 ? "#22c55e" : "#f97316" }}
               >
                 {preview.pnl >= 0 ? "+" : ""}
-                <CoinIcon size={13} />{preview.pnl}
+                <CoinIcon size={13} />{preview.pnl.toLocaleString()}
               </span>
             </div>
             <div className="flex justify-between text-xs">

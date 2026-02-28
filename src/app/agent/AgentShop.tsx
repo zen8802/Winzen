@@ -1,76 +1,45 @@
 "use client";
 
 import { useState } from "react";
-import { setAgentGender, purchaseAgentItem, equipAgentItem } from "@/app/actions/agent";
-import { formatCoins } from "@/lib/coins";
+import { purchaseAgentItem, equipAgentItem } from "@/app/actions/agent";
 import { CoinIcon } from "@/components/CoinIcon";
 import { useRouter } from "next/navigation";
+import { AVATAR_CATEGORIES, CATEGORY_LABELS, type AvatarEquipped } from "@/lib/avatar";
 
 type AgentItem = {
-  id: string;
+  id:       string;
   category: string;
-  name: string;
-  price: number;
-  gender: string;
-  order: number;
-};
-
-type Category = { id: string; label: string };
-
-type Equipped = {
-  headware: string | null;
-  shirt: string | null;
-  pants: string | null;
-  shoes: string | null;
-  accessories: string | null;
+  name:     string;
+  price:    number;
+  icon:     string | null;
+  order:    number;
 };
 
 export function AgentShop({
-  categories,
   items,
   ownedIds,
   equipped,
-  needsGender,
 }: {
-  categories: readonly Category[];
-  items: AgentItem[];
+  items:    AgentItem[];
   ownedIds: Set<string>;
-  equipped: Equipped;
-  needsGender: boolean;
+  equipped: AvatarEquipped;
 }) {
   const router = useRouter();
-  const [activeCategory, setActiveCategory] = useState(categories[0]?.id ?? "headware");
-  const [genderModal, setGenderModal] = useState(needsGender);
-  const [loading, setLoading] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string>(AVATAR_CATEGORIES[0]);
+  const [loading, setLoading]               = useState<string | null>(null);
+  const [error, setError]                   = useState("");
 
   const filteredItems = items.filter((i) => i.category === activeCategory);
-  const equippedId = equipped[activeCategory as keyof Equipped] ?? null;
-
-  async function handleSetGender(g: "male" | "female") {
-    setError("");
-    const formData = new FormData();
-    formData.set("gender", g);
-    const res = await setAgentGender(formData);
-    if (res?.error) {
-      setError(res.error);
-      return;
-    }
-    setGenderModal(false);
-    router.refresh();
-  }
+  const equippedId    = equipped[activeCategory as keyof AvatarEquipped] ?? null;
 
   async function handlePurchase(itemId: string) {
     setError("");
     setLoading(itemId);
-    const formData = new FormData();
-    formData.set("agentItemId", itemId);
-    const res = await purchaseAgentItem(formData);
+    const fd = new FormData();
+    fd.set("agentItemId", itemId);
+    const res = await purchaseAgentItem(fd);
     setLoading(null);
-    if (res?.error) {
-      setError(res.error);
-      return;
-    }
+    if (res?.error) { setError(res.error); return; }
     window.dispatchEvent(new CustomEvent("balance-updated"));
     router.refresh();
   }
@@ -78,135 +47,101 @@ export function AgentShop({
   async function handleEquip(itemId: string | null) {
     setError("");
     setLoading(itemId ?? "unequip");
-    const formData = new FormData();
-    formData.set("agentItemId", itemId ?? "");
-    formData.set("slot", activeCategory);
-    const res = await equipAgentItem(formData);
+    const fd = new FormData();
+    fd.set("agentItemId", itemId ?? "");
+    fd.set("slot", activeCategory);
+    const res = await equipAgentItem(fd);
     setLoading(null);
-    if (res?.error) {
-      setError(res.error);
-      return;
-    }
+    if (res?.error) { setError(res.error); return; }
     router.refresh();
   }
 
   return (
     <>
-      {genderModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="card mx-4 max-w-md space-y-4">
-            <h2 className="text-xl font-semibold text-[var(--text)]">
-              Choose your gender
-            </h2>
-            <p className="text-sm text-[var(--muted)]">
-              This helps us show the right mannequin and item fits.
-            </p>
-            <div className="flex gap-4">
-              <button
-                type="button"
-                onClick={() => handleSetGender("male")}
-                className="btn-primary flex-1"
-              >
-                Male
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetGender("female")}
-                className="btn-primary flex-1"
-              >
-                Female
-              </button>
-            </div>
-            {error && (
-              <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
-                {error}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="card space-y-4">
+        {/* Category tabs */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-4">
           <div className="flex flex-wrap gap-2">
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setActiveCategory(c.id)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                activeCategory === c.id
-                  ? "bg-[var(--accent)]/20 text-[var(--accent)]"
-                  : "bg-white/5 text-[var(--muted)] hover:bg-white/10 hover:text-[var(--text)]"
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
+            {AVATAR_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setActiveCategory(cat)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  activeCategory === cat
+                    ? "bg-[var(--accent)]/20 text-[var(--accent)]"
+                    : "bg-white/5 text-[var(--muted)] hover:bg-white/10 hover:text-[var(--text)]"
+                }`}
+              >
+                {CATEGORY_LABELS[cat]}
+              </button>
+            ))}
           </div>
-          {!needsGender && (
-            <button
-              type="button"
-              onClick={() => setGenderModal(true)}
-              className="btn-ghost text-xs"
-            >
-              Change gender
-            </button>
-          )}
         </div>
 
-        {error && (
-          <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
-            {error}
-          </p>
-        )}
+        {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
 
+        {/* Item grid */}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filteredItems.map((item) => {
-            const owned = ownedIds.has(item.id);
+            const owned      = ownedIds.has(item.id);
             const isEquipped = equippedId === item.id;
 
             return (
               <div
                 key={item.id}
-                className={`rounded-xl border p-4 ${
+                className={`rounded-xl border p-4 space-y-3 ${
                   isEquipped
                     ? "border-[var(--accent)] bg-[var(--accent)]/10"
                     : "border-[var(--border)] bg-white/[0.02]"
                 }`}
               >
-                <div className="mb-2 flex items-center justify-between">
+                {/* Item preview image */}
+                {item.icon && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.icon}
+                    alt={item.name}
+                    className="mx-auto h-20 w-auto object-contain"
+                    style={{ imageRendering: "pixelated" }}
+                  />
+                )}
+
+                <div className="flex items-center justify-between">
                   <span className="font-medium text-[var(--text)]">{item.name}</span>
-                  <span className="inline-flex items-center gap-1 font-mono text-sm text-[var(--coin)]">
-                    <CoinIcon size={13} />
-                    {item.price.toLocaleString()}
-                  </span>
+                  {!owned && (
+                    <span className="inline-flex items-center gap-1 font-mono text-sm text-[var(--coin)]">
+                      <CoinIcon size={13} />
+                      {item.price.toLocaleString()}
+                    </span>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-2">
+
+                <div>
                   {!owned ? (
                     <button
                       type="button"
                       onClick={() => handlePurchase(item.id)}
                       disabled={!!loading}
-                      className="btn-primary text-sm"
+                      className="btn-primary w-full text-sm"
                     >
-                      {loading === item.id ? "Buying…" : "Buy"}
+                      {loading === item.id ? "Buying…" : `Buy · ${item.price.toLocaleString()}`}
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={() => handleEquip(isEquipped ? null : item.id)}
                       disabled={!!loading}
-                      className={`text-sm ${
+                      className={`w-full rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                         isEquipped
-                          ? "text-[var(--accent)]"
-                          : "btn-ghost text-sm"
+                          ? "border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)]/10"
+                          : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--text)]"
                       }`}
                     >
-                      {loading === item.id || loading === "unequip"
-                        ? "..."
+                      {loading === item.id || (loading === "unequip" && isEquipped)
+                        ? "…"
                         : isEquipped
-                          ? "Equipped"
+                          ? "✓ Equipped"
                           : "Equip"}
                     </button>
                   )}
@@ -217,8 +152,8 @@ export function AgentShop({
         </div>
 
         {filteredItems.length === 0 && (
-          <p className="py-8 text-center text-[var(--muted)]">
-            No items in this category.
+          <p className="py-8 text-center text-sm text-[var(--muted)]">
+            No items in this category yet.
           </p>
         )}
       </div>

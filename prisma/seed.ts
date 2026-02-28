@@ -119,66 +119,57 @@ async function main() {
     include: { outcomes: true },
   });
 
-  // Agent marketplace items
+  // ─── Agent shop items ─────────────────────────────────────────────────────
+  // To add new items: place PNG at /public/avatar/items/[category]/[slug].png
+  // then add an entry below (or via admin panel). No code changes needed.
+  // Categories: skin | eyes | mouth | hair | top | bottom | shoes | hat | accessory_front | accessory_back
   const existingItems = await prisma.agentItem.count();
   if (existingItems === 0) {
-    const prices = [80, 120, 150, 90, 200];
     await prisma.agentItem.createMany({
       data: [
-        ...["Baseball Cap", "Beanie", "Headband", "Sun Visor", "Fedora"].map((name, i) => ({
-          category: "headware",
-          name,
-          price: prices[i] ?? 100,
-          gender: "unisex",
-          order: i,
-        })),
-        ...["T-Shirt", "Polo", "Hoodie", "Tank Top", "Button-Up"].map((name, i) => ({
-          category: "shirt",
-          name,
-          price: (prices[i] ?? 100) + 20,
-          gender: "unisex",
-          order: i,
-        })),
-        { category: "shirt", name: "Red Shirt", price: 500, gender: "unisex", order: 10, color: "#ef4444" },
-        ...["Jeans", "Shorts", "Cargo Pants", "Chinos", "Sweatpants"].map((name, i) => ({
-          category: "pants",
-          name,
-          price: (prices[i] ?? 100) + 30,
-          gender: "unisex",
-          order: i,
-        })),
-        ...["Sneakers", "Boots", "Sandals", "Loafers", "Flip-Flops"].map((name, i) => ({
-          category: "shoes",
-          name,
-          price: (prices[i] ?? 100) + 40,
-          gender: "unisex",
-          order: i,
-        })),
-        ...["Watch", "Bracelet", "Sunglasses", "Backpack", "Scarf"].map((name, i) => ({
-          category: "accessories",
-          name,
-          price: (prices[i] ?? 100) + 10,
-          gender: "unisex",
-          order: i,
-        })),
+        // ── Skin tones ────────────────────────────────────────────────────
+        { category: "skin",   name: "Light Tone",     price: 0,   order: 0, icon: null },
+        { category: "skin",   name: "Medium Tone",    price: 50,  order: 1, icon: null },
+        { category: "skin",   name: "Dark Tone",      price: 50,  order: 2, icon: null },
+        // ── Eyes ──────────────────────────────────────────────────────────
+        { category: "eyes",   name: "Sunglasses",     price: 150, order: 0, icon: null },
+        { category: "eyes",   name: "Round Frames",   price: 120, order: 1, icon: null },
+        { category: "eyes",   name: "Eye Mask",       price: 200, order: 2, icon: null },
+        // ── Mouth ─────────────────────────────────────────────────────────
+        { category: "mouth",  name: "Big Smile",      price: 80,  order: 0, icon: null },
+        { category: "mouth",  name: "Cool Smirk",     price: 100, order: 1, icon: null },
+        { category: "mouth",  name: "Tongue Out",     price: 120, order: 2, icon: null },
+        // ── Hair ──────────────────────────────────────────────────────────
+        { category: "hair",   name: "Messy Hair",     price: 100, order: 0, icon: null },
+        { category: "hair",   name: "Slick Back",     price: 130, order: 1, icon: null },
+        { category: "hair",   name: "Curly",          price: 140, order: 2, icon: null },
+        { category: "hair",   name: "Long Waves",     price: 160, order: 3, icon: null },
+        // ── Tops ──────────────────────────────────────────────────────────
+        { category: "top",    name: "T-Shirt",        price: 100, order: 0, icon: null },
+        { category: "top",    name: "Hoodie",         price: 170, order: 1, icon: null },
+        { category: "top",    name: "Button-Up",      price: 140, order: 2, icon: null },
+        { category: "top",    name: "Polo",           price: 130, order: 3, icon: null },
+        // ── Bottoms ───────────────────────────────────────────────────────
+        { category: "bottom", name: "Jeans",          price: 110, order: 0, icon: null },
+        { category: "bottom", name: "Shorts",         price: 90,  order: 1, icon: null },
+        { category: "bottom", name: "Cargo Pants",    price: 150, order: 2, icon: null },
+        { category: "bottom", name: "Sweatpants",     price: 120, order: 3, icon: null },
+        // ── Shoes ─────────────────────────────────────────────────────────
+        { category: "shoes",  name: "Sneakers",       price: 120, order: 0, icon: null },
+        { category: "shoes",  name: "Boots",          price: 160, order: 1, icon: null },
+        { category: "shoes",  name: "Sandals",        price: 90,  order: 2, icon: null },
+        { category: "shoes",  name: "Loafers",        price: 130, order: 3, icon: null },
+        // ── Hats ──────────────────────────────────────────────────────────
+        { category: "hat",    name: "Baseball Cap",   price: 80,  order: 0, icon: null },
+        { category: "hat",    name: "Beanie",         price: 120, order: 1, icon: null },
+        { category: "hat",    name: "Sun Visor",      price: 90,  order: 2, icon: null },
+        { category: "hat",    name: "Fedora",         price: 200, order: 3, icon: null },
+        // ── Accessories ───────────────────────────────────────────────────
+        { category: "accessory_front", name: "Gold Chain",   price: 180, order: 0, icon: null },
+        { category: "accessory_front", name: "Bow Tie",      price: 130, order: 1, icon: null },
+        { category: "accessory_back",  name: "Angel Wings",  price: 300, order: 0, icon: null },
+        { category: "accessory_back",  name: "Backpack",     price: 200, order: 1, icon: null },
       ],
-    });
-  }
-
-  // Ensure Red Shirt exists (in case seed ran before it was added)
-  const redShirt = await prisma.agentItem.findFirst({
-    where: { category: "shirt", name: "Red Shirt" },
-  });
-  if (!redShirt) {
-    await prisma.agentItem.create({
-      data: {
-        category: "shirt",
-        name: "Red Shirt",
-        price: 500,
-        gender: "unisex",
-        order: 10,
-        color: "#ef4444",
-      },
     });
   }
 

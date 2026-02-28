@@ -55,6 +55,8 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
 
   const yesProb = market.currentProbability;
   const noProb = 100 - yesProb;
+  const yesMultiplier = (100 / yesProb).toFixed(2);
+  const noMultiplier = (100 / noProb).toFixed(2);
 
   // User's open positions on this market
   let userOpenBets: Array<{
@@ -150,13 +152,15 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         <div className="flex items-center gap-3 sm:gap-6 rounded-xl border border-[var(--border)] bg-white/[0.02] p-4">
           <div className="flex-1 text-center">
             <p className="text-2xl sm:text-3xl font-extrabold text-green-400">{yesProb.toFixed(1)}%</p>
+            <p className="mt-0.5 text-sm font-semibold text-green-400/70">{yesMultiplier}×</p>
             <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               YES
             </p>
           </div>
-          <div className="h-12 w-px bg-[var(--border)]" />
+          <div className="h-14 w-px bg-[var(--border)]" />
           <div className="flex-1 text-center">
             <p className="text-2xl sm:text-3xl font-extrabold text-orange-400">{noProb.toFixed(1)}%</p>
+            <p className="mt-0.5 text-sm font-semibold text-orange-400/70">{noMultiplier}×</p>
             <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               NO
             </p>

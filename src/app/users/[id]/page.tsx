@@ -4,6 +4,8 @@ import Link from "next/link";
 import { CoinIcon } from "@/components/CoinIcon";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { getLevelFromXp, getTitle } from "@/lib/gamification";
+import { Avatar } from "@/components/Avatar";
+import { getUserAvatarData } from "@/app/actions/agent";
 
 async function getUserProfile(id: string) {
   const [user, createdMarkets, recentBets] = await Promise.all([
@@ -62,7 +64,10 @@ export default async function UserProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { user, createdMarkets, recentBets } = await getUserProfile(id);
+  const [{ user, createdMarkets, recentBets }, avatarData] = await Promise.all([
+    getUserProfile(id),
+    getUserAvatarData(id),
+  ]);
   if (!user) notFound();
 
   const level = getLevelFromXp(user.xp);
@@ -81,20 +86,27 @@ export default async function UserProfilePage({
 
       {/* Profile header */}
       <div className="card">
-        <div className="flex flex-wrap items-start gap-4">
-          <div
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)" }}
-          >
-            {initial}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-2xl font-bold">{user.name ?? "Anonymous"}</h1>
-            <p className="text-sm text-[var(--muted)]">{title} · Level {level}</p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-xl font-mono font-bold text-[var(--accent)]">{user.eloRating}</p>
-            <p className="text-xs text-[var(--muted)]">ELO</p>
+        <div className="flex flex-wrap items-start gap-6">
+          {/* Avatar or initial fallback */}
+          {avatarData ? (
+            <Avatar equipped={avatarData.equipped} size="lg" />
+          ) : (
+            <div
+              className="flex h-[140px] w-20 shrink-0 items-center justify-center rounded-xl text-2xl font-bold text-white"
+              style={{ background: "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)" }}
+            >
+              {initial}
+            </div>
+          )}
+          <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+            <div>
+              <h1 className="text-2xl font-bold">{user.name ?? "Anonymous"}</h1>
+              <p className="text-sm text-[var(--muted)]">{title} · Level {level}</p>
+            </div>
+            <div>
+              <p className="text-xl font-mono font-bold text-[var(--accent)]">{user.eloRating}</p>
+              <p className="text-xs text-[var(--muted)]">ELO rating</p>
+            </div>
           </div>
         </div>
       </div>

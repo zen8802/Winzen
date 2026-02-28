@@ -5,15 +5,20 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { resolveEquipped, type AvatarCategory, type AvatarEquipped } from "@/lib/avatar";
 
-export async function getAgent() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return null;
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-  return prisma.userAgent.findUnique({
-    where: { userId: session.user.id },
-  });
-}
+export type AgentItemRow = {
+  id:       string;
+  category: string;
+  name:     string;
+  price:    number;
+  icon:     string | null;
+  order:    number;
+};
+
+// ─── Queries ──────────────────────────────────────────────────────────────────
 
 export async function getAgentWithItems() {
   const session = await getServerSession(authOptions);
@@ -30,58 +35,96 @@ export async function getAgentWithItems() {
 
   const ownedIds = new Set(purchases.map((p) => p.agentItemId));
 
-  // Fetch equipped item colors for mannequin display - use item color or default when equipped
-  const defaults = { headware: "#475569", shirt: "#64748b", pants: "#475569", shoes: "#374151", accessories: "#94a3b8" };
-  const slots = [
-    { id: agent?.equippedHeadwareId, key: "headware" as const },
-    { id: agent?.equippedShirtId, key: "shirt" as const },
-    { id: agent?.equippedPantsId, key: "pants" as const },
-    { id: agent?.equippedShoesId, key: "shoes" as const },
-    { id: agent?.equippedAccessoryId, key: "accessories" as const },
-  ];
-  const equippedColors: Record<string, string | null> = {};
-  for (const { id, key } of slots) {
-    if (!id) {
-      equippedColors[key] = null;
-      continue;
-    }
-    const item = await prisma.agentItem.findUnique({
-      where: { id },
-      select: { color: true },
-    });
-    equippedColors[key] = item?.color ?? defaults[key];
-  }
+  // Build icon map for equipped items
+  const equippedItemIds = [
+    agent?.equippedSkinId,
+    agent?.equippedEyesId,
+    agent?.equippedMouthId,
+    agent?.equippedHairId,
+    agent?.equippedTopId,
+    agent?.equippedBottomId,
+    agent?.equippedShoesId,
+    agent?.equippedHatId,
+    agent?.equippedAccessoryFrontId,
+    agent?.equippedAccessoryBackId,
+  ].filter(Boolean) as string[];
+
+  const equippedItems = equippedItemIds.length
+    ? await prisma.agentItem.findMany({ where: { id: { in: equippedItemIds } } })
+    : [];
+
+  const iconMap = new Map(equippedItems.map((i) => [i.id, i.icon ?? ""]));
+  const equipped = resolveEquipped(agent, iconMap);
 
   return {
     agent,
-    items,
+    items: items as AgentItemRow[],
     ownedIds,
-    equippedHeadwareColor: equippedColors.headware ?? null,
-    equippedShirtColor: equippedColors.shirt ?? null,
-    equippedPantsColor: equippedColors.pants ?? null,
-    equippedShoesColor: equippedColors.shoes ?? null,
-    equippedAccessoryColor: equippedColors.accessories ?? null,
+    equipped,
   };
 }
 
-const setGenderSchema = z.object({ gender: z.enum(["male", "female"]) });
+/** Fetch avatar display data for any user (used on profile, leaderboard, comments). */
+export async function getUserAvatarData(userId: string): Promise<{
+  equipped: AvatarEquipped;
+} | null> {
+  const agent = await prisma.userAgent.findUnique({ where: { userId } });
+  if (!agent) return null;
 
-export async function setAgentGender(formData: FormData) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return { error: "Not signed in" };
+  const ids = [
+    agent.equippedSkinId,
+    agent.equippedEyesId,
+    agent.equippedMouthId,
+    agent.equippedHairId,
+    agent.equippedTopId,
+    agent.equippedBottomId,
+    agent.equippedShoesId,
+    agent.equippedHatId,
+    agent.equippedAccessoryFrontId,
+    agent.equippedAccessoryBackId,
+  ].filter(Boolean) as string[];
 
-  const parsed = setGenderSchema.safeParse({ gender: formData.get("gender") });
-  if (!parsed.success) return { error: "Invalid gender" };
+  const items = ids.length
+    ? await prisma.agentItem.findMany({ where: { id: { in: ids } } })
+    : [];
 
-  await prisma.userAgent.upsert({
-    where: { userId: session.user.id },
-    create: { userId: session.user.id, gender: parsed.data.gender },
-    update: { gender: parsed.data.gender },
+  const iconMap = new Map(items.map((i) => [i.id, i.icon ?? ""]));
+
+  return { equipped: resolveEquipped(agent, iconMap) };
+}
+
+/** Batch-fetch avatar data for multiple users in 2 queries (for comments/leaderboard). */
+export async function getBatchAvatarData(
+  userIds: string[],
+): Promise<Map<string, { equipped: AvatarEquipped }>> {
+  if (userIds.length === 0) return new Map();
+
+  const agents = await prisma.userAgent.findMany({
+    where: { userId: { in: userIds } },
   });
 
-  revalidatePath("/agent");
-  return { ok: true };
+  const allIds = agents.flatMap((a) =>
+    [
+      a.equippedSkinId, a.equippedEyesId, a.equippedMouthId, a.equippedHairId,
+      a.equippedTopId, a.equippedBottomId, a.equippedShoesId, a.equippedHatId,
+      a.equippedAccessoryFrontId, a.equippedAccessoryBackId,
+    ].filter(Boolean)
+  ) as string[];
+
+  const items = allIds.length
+    ? await prisma.agentItem.findMany({ where: { id: { in: allIds } } })
+    : [];
+
+  const iconMap = new Map(items.map((i) => [i.id, i.icon ?? ""]));
+
+  const result = new Map<string, { equipped: AvatarEquipped }>();
+  for (const a of agents) {
+    result.set(a.userId, { equipped: resolveEquipped(a, iconMap) });
+  }
+  return result;
 }
+
+// ─── Mutations ────────────────────────────────────────────────────────────────
 
 const purchaseSchema = z.object({ agentItemId: z.string() });
 
@@ -110,13 +153,8 @@ export async function purchaseAgentItem(formData: FormData) {
   const newBalance = user.balance - item.price;
 
   await prisma.$transaction([
-    prisma.user.update({
-      where: { id: session.user.id },
-      data: { balance: newBalance },
-    }),
-    prisma.agentPurchase.create({
-      data: { userId: session.user.id, agentItemId: item.id },
-    }),
+    prisma.user.update({ where: { id: session.user.id }, data: { balance: newBalance } }),
+    prisma.agentPurchase.create({ data: { userId: session.user.id, agentItemId: item.id } }),
     prisma.transaction.create({
       data: {
         userId: session.user.id,
@@ -133,18 +171,34 @@ export async function purchaseAgentItem(formData: FormData) {
   return { ok: true };
 }
 
+const SLOT_FIELD: Record<AvatarCategory, string> = {
+  skin:             "equippedSkinId",
+  eyes:             "equippedEyesId",
+  mouth:            "equippedMouthId",
+  hair:             "equippedHairId",
+  top:              "equippedTopId",
+  bottom:           "equippedBottomId",
+  shoes:            "equippedShoesId",
+  hat:              "equippedHatId",
+  accessory_front:  "equippedAccessoryFrontId",
+  accessory_back:   "equippedAccessoryBackId",
+};
+
 const equipSchema = z.object({
   agentItemId: z.string().nullable(),
-  slot: z.enum(["headware", "shirt", "pants", "shoes", "accessories"]),
+  slot: z.enum([
+    "skin", "eyes", "mouth", "hair", "top", "bottom",
+    "shoes", "hat", "accessory_front", "accessory_back",
+  ]),
 });
 
 export async function equipAgentItem(formData: FormData) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return { error: "Not signed in" };
 
-  const agentItemId = formData.get("agentItemId");
+  const raw = formData.get("agentItemId");
   const parsed = equipSchema.safeParse({
-    agentItemId: agentItemId === "" || agentItemId === "null" ? null : agentItemId,
+    agentItemId: raw === "" || raw === "null" ? null : raw,
     slot: formData.get("slot"),
   });
   if (!parsed.success) return { error: "Invalid data" };
@@ -157,28 +211,16 @@ export async function equipAgentItem(formData: FormData) {
     });
     if (!owned) return { error: "You don't own this item" };
 
-    const item = await prisma.agentItem.findUnique({
-      where: { id: parsed.data.agentItemId },
-    });
+    const item = await prisma.agentItem.findUnique({ where: { id: parsed.data.agentItemId } });
     if (!item || item.category !== parsed.data.slot) return { error: "Invalid item for slot" };
   }
 
-  const slot = parsed.data.slot;
-  const updateData = {
-    headware: { equippedHeadwareId: parsed.data.agentItemId },
-    shirt: { equippedShirtId: parsed.data.agentItemId },
-    pants: { equippedPantsId: parsed.data.agentItemId },
-    shoes: { equippedShoesId: parsed.data.agentItemId },
-    accessories: { equippedAccessoryId: parsed.data.agentItemId },
-  }[slot];
+  const field = SLOT_FIELD[parsed.data.slot];
+  const updateData = { [field]: parsed.data.agentItemId };
 
   await prisma.userAgent.upsert({
-    where: { userId: session.user.id },
-    create: {
-      userId: session.user.id,
-      gender: "male",
-      ...updateData,
-    },
+    where:  { userId: session.user.id },
+    create: { userId: session.user.id, ...updateData },
     update: updateData,
   });
 

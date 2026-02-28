@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, memo } from "react";
 import Link from "next/link";
 import { postComment } from "@/app/actions/comments";
 import type { CommentRow } from "@/app/actions/comments";
+import { Avatar } from "@/components/Avatar";
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -17,22 +18,45 @@ function timeAgo(dateStr: string): string {
 }
 
 const CommentItem = memo(function CommentItem({ comment }: { comment: CommentRow }) {
+  const initial = (comment.username ?? "?")[0].toUpperCase();
+
   return (
-    <li className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-      <div className="flex items-baseline gap-2">
-        {comment.userId ? (
-          <Link
-            href={`/users/${comment.userId}`}
-            className="text-sm font-semibold text-[var(--text)] hover:text-[var(--accent)] transition-colors"
-          >
-            {comment.username}
-          </Link>
+    <li className="flex gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+      {/* Avatar portrait chip */}
+      <div className="shrink-0 -my-1">
+        {comment.avatarEquipped !== undefined ? (
+          <Avatar
+            equipped={comment.avatarEquipped ?? {}}
+            size="sm"
+            animate={false}
+          />
         ) : (
-          <span className="text-sm font-semibold text-[var(--text)]">{comment.username}</span>
+          <div
+            className="flex h-[70px] w-10 items-center justify-center rounded-lg text-sm font-bold text-white"
+            style={{ background: "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)" }}
+          >
+            {initial}
+          </div>
         )}
-        <span className="text-xs text-[var(--muted)]">{timeAgo(comment.createdAt)}</span>
       </div>
-      <p className="mt-1 text-sm leading-relaxed text-[var(--text)]">{comment.content}</p>
+
+      {/* Content */}
+      <div className="min-w-0 flex-1 py-1">
+        <div className="flex items-baseline gap-2">
+          {comment.userId ? (
+            <Link
+              href={`/users/${comment.userId}`}
+              className="text-sm font-semibold text-[var(--text)] hover:text-[var(--accent)] transition-colors"
+            >
+              {comment.username}
+            </Link>
+          ) : (
+            <span className="text-sm font-semibold text-[var(--text)]">{comment.username}</span>
+          )}
+          <span className="text-xs text-[var(--muted)]">{timeAgo(comment.createdAt)}</span>
+        </div>
+        <p className="mt-1 text-sm leading-relaxed text-[var(--text)]">{comment.content}</p>
+      </div>
     </li>
   );
 });

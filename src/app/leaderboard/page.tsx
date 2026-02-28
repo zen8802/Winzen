@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { CoinIcon } from "@/components/CoinIcon";
+import { Avatar } from "@/components/Avatar";
+import { getBatchAvatarData } from "@/app/actions/agent";
 
 const MEDAL = ["🥇", "🥈", "🥉"] as const;
 
@@ -25,6 +27,8 @@ export default async function LeaderboardPage() {
     orderBy: { totalProfit: "desc" },
     take: 50,
   });
+
+  const avatarMap = await getBatchAvatarData(users.map((u) => u.id));
 
   return (
     <div className="space-y-6">
@@ -71,6 +75,21 @@ export default async function LeaderboardPage() {
                     </span>
                   )}
                 </div>
+
+                {/* Avatar */}
+                {(() => {
+                  const av = avatarMap.get(user.id);
+                  return av ? (
+                    <Avatar equipped={av.equipped} size="sm" animate={false} />
+                  ) : (
+                    <div
+                      className="flex h-[70px] w-10 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
+                      style={{ background: "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)" }}
+                    >
+                      {user.name[0].toUpperCase()}
+                    </div>
+                  );
+                })()}
 
                 {/* Name */}
                 <div className="min-w-0 flex-1">

@@ -40,6 +40,28 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ─── Avatar idle animations ──────────────────────────────────────────────── */
+@keyframes avatar-breathe {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-5px); }
+}
+
+/* Periodic blink: closed for 120ms every ~4s */
+@keyframes avatar-blink {
+  0%, 94%, 100% { transform: scaleY(1);   }
+  96%           { transform: scaleY(0.05); }
+  98%           { transform: scaleY(1);   }
+}
+
+.avatar-idle {
+  animation: avatar-breathe 3.2s ease-in-out infinite;
+}
+
+.avatar-blink {
+  transform-origin: center 30%; /* keeps blink near the top of the layer where eyes sit */
+  animation: avatar-blink 4s ease-in-out infinite;
+}
+
 @layer components {
   .logo-gradient {
     background: linear-gradient(135deg, #f472b6 0%, #a78bfa 100%);

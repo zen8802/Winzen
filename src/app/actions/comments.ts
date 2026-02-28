@@ -3,13 +3,16 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getBatchAvatarData } from "@/app/actions/agent";
+import type { AvatarEquipped } from "@/lib/avatar";
 
 export type CommentRow = {
-  id: string;
-  userId: string;
-  username: string;
-  content: string;
-  createdAt: string; // ISO string
+  id:              string;
+  userId:          string;
+  username:        string;
+  content:         string;
+  createdAt:       string; // ISO string
+  avatarEquipped?: AvatarEquipped;
 };
 
 export async function getComments(marketId: string): Promise<CommentRow[]> {
@@ -19,10 +22,21 @@ export async function getComments(marketId: string): Promise<CommentRow[]> {
     take: 50,
     select: { id: true, userId: true, username: true, content: true, createdAt: true },
   });
-  return rows.map((r) => ({
-    ...r,
-    createdAt: r.createdAt.toISOString(),
-  }));
+
+  const uniqueUserIds = Array.from(new Set(rows.map((r) => r.userId)));
+  const avatarMap = await getBatchAvatarData(uniqueUserIds);
+
+  return rows.map((r) => {
+    const av = avatarMap.get(r.userId);
+    return {
+      id:              r.id,
+      userId:          r.userId,
+      username:        r.username,
+      content:         r.content,
+      createdAt:       r.createdAt.toISOString(),
+      avatarEquipped:  av?.equipped,
+    };
+  });
 }
 
 export async function postComment(
