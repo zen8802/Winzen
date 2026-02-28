@@ -92,12 +92,12 @@ function seededHash(str: string): number {
   return Math.abs(hash);
 }
 
-/** Returns 3 missions for the given date string (YYYY-MM-DD), same for all users. */
-export function getDailyMissions(dateStr: string): MissionTemplate[] {
+/** Returns `count` missions for the given date string (YYYY-MM-DD), same for all users. */
+export function getDailyMissions(dateStr: string, count = 3): MissionTemplate[] {
   const sorted = [...MISSION_TEMPLATES].sort(
     (a, b) => seededHash(a.key + dateStr) - seededHash(b.key + dateStr)
   );
-  return sorted.slice(0, 3);
+  return sorted.slice(0, count);
 }
 
 /** A market is "trending" if it has enough volume or participants. */

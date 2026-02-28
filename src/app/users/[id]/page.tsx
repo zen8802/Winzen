@@ -22,6 +22,7 @@ async function getUserProfile(id: string) {
         totalLosses: true,
         totalProfit: true,
         winStreak: true,
+        battlePassIsPremium: true,
       },
     }),
     prisma.market.findMany({
@@ -92,7 +93,7 @@ export default async function UserProfilePage({
             <Avatar equipped={avatarData.equipped} size="lg" />
           ) : (
             <div
-              className="flex h-[140px] w-20 shrink-0 items-center justify-center rounded-xl text-2xl font-bold text-white"
+              className="flex h-[140px] w-[140px] shrink-0 items-center justify-center rounded-xl text-2xl font-bold text-white"
               style={{ background: "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)" }}
             >
               {initial}
@@ -100,7 +101,12 @@ export default async function UserProfilePage({
           )}
           <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
             <div>
-              <h1 className="text-2xl font-bold">{user.name ?? "Anonymous"}</h1>
+              <h1
+                className="text-2xl font-bold"
+                style={{ color: user.battlePassIsPremium ? "#a78bfa" : undefined }}
+              >
+                {user.name ?? "Anonymous"}
+              </h1>
               <p className="text-sm text-[var(--muted)]">{title} · Level {level}</p>
             </div>
             <div>

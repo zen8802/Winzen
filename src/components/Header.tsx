@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import { CoinIcon } from "@/components/CoinIcon";
 import { NotificationBell } from "@/components/NotificationBell";
 import { SettingsDropdown } from "@/components/SettingsDropdown";
+import { BattlePassIcon } from "@/components/BattlePassIcon";
 
 export function Header() {
   const { data: session, status } = useSession();
@@ -73,12 +74,14 @@ export function Header() {
         {/* Desktop nav — hidden below md */}
         <nav className="hidden md:flex items-center gap-4">
           {navLinks}
+          {status === "authenticated" && <BattlePassIcon />}
           {status === "authenticated" && <NotificationBell />}
           <SettingsDropdown />
         </nav>
 
         {/* Mobile right side: notification + settings + hamburger */}
         <div className="flex items-center gap-1 md:hidden">
+          {status === "authenticated" && <BattlePassIcon />}
           {status === "authenticated" && <NotificationBell />}
           <SettingsDropdown />
           <button

@@ -28,6 +28,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // ── Battle Pass ──────────────────────────────────────────────────────────────
+  battlePassSeasonId  String?
+  battlePassXp        Int     @default(0)
+  battlePassIsPremium Boolean @default(false)
+
   marketsCreated     Market[]              @relation("CreatedBy")
   bets               Bet[]
   transactions       Transaction[]
@@ -38,6 +43,7 @@ model User {
   comments           Comment[]
   notifications      Notification[]
   settings           UserSettings?
+  claimedRewards     ClaimedReward[]
 }
 
 model UserMissionProgress {
@@ -239,6 +245,54 @@ model UserSettings {
   notifyOnBetResult        Boolean @default(true)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Battle Pass ──────────────────────────────────────────────────────────────
+
+model BattlePassSeason {
+  id         String   @id @default(cuid())
+  name       String
+  startsAt   DateTime
+  endsAt     DateTime
+  totalTiers Int      @default(30)
+  xpPerTier  Int      @default(300)
+  isActive   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  rewards BattlePassReward[]
+  claims  ClaimedReward[]
+}
+
+model BattlePassReward {
+  id         String  @id @default(cuid())
+  seasonId   String
+  tier       Int
+  track      String  // "FREE" | "PREMIUM"
+  rewardType String  // "COINS" | "CHOICE_COSMETIC" | "XP_BOOST_MARKER"
+  amount     Int?    // coins amount for COINS rewards
+  itemSlot   String? // "hat" | "top" | "bottom" | "shoes" for CHOICE_COSMETIC
+  label      String? // display label override
+
+  season BattlePassSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  claims ClaimedReward[]
+
+  @@index([seasonId, tier])
+}
+
+model ClaimedReward {
+  id           String   @id @default(cuid())
+  userId       String
+  seasonId     String
+  rewardId     String
+  choiceItemId String?  // AgentItem.id chosen for CHOICE_COSMETIC rewards
+  claimedAt    DateTime @default(now())
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  season BattlePassSeason @relation(fields: [seasonId], references: [id])
+  reward BattlePassReward @relation(fields: [rewardId], references: [id])
+
+  @@unique([userId, rewardId])
+  @@index([userId, seasonId])
 }
 
 // Ephemeral global activity log — capped at 200 rows, no FK constraints for simplicity

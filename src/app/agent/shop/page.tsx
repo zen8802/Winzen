@@ -30,11 +30,11 @@ export default async function AgentShopPage() {
       </section>
 
       {/* Avatar preview + shop side by side on large screens */}
-      <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
+      <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
         {/* Avatar live preview */}
         <div className="flex flex-col items-center gap-3">
-          <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--surface)] to-[var(--bg)] p-5">
-            <Avatar equipped={equipped} size="lg" animate={false} />
+          <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--surface)] to-[var(--bg)] p-2">
+            <Avatar equipped={equipped} size="xl" animate={false} />
           </div>
           <p className="text-xs text-[var(--muted)]">Currently equipped</p>
         </div>

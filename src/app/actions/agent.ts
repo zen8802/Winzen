@@ -240,5 +240,8 @@ export async function equipAgentItem(formData: FormData) {
   });
 
   revalidatePath("/agent");
+  revalidatePath("/agent/shop");
+  revalidatePath("/leaderboard");
+  revalidatePath(`/users/${session.user.id}`);
   return { ok: true };
 }

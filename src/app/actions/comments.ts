@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBatchAvatarData } from "@/app/actions/agent";
 import type { AvatarEquipped } from "@/lib/avatar";
+import { awardBattlePassXp } from "@/app/actions/battle-pass";
+import { BP_FIRST_COMMENT_XP } from "@/lib/battle-pass";
 
 export type CommentRow = {
   id:              string;
@@ -13,6 +15,7 @@ export type CommentRow = {
   content:         string;
   createdAt:       string; // ISO string
   avatarEquipped?: AvatarEquipped;
+  isPremium?:      boolean;
 };
 
 export async function getComments(marketId: string): Promise<CommentRow[]> {
@@ -24,7 +27,14 @@ export async function getComments(marketId: string): Promise<CommentRow[]> {
   });
 
   const uniqueUserIds = Array.from(new Set(rows.map((r) => r.userId)));
-  const avatarMap = await getBatchAvatarData(uniqueUserIds);
+  const [avatarMap, premiumUsers] = await Promise.all([
+    getBatchAvatarData(uniqueUserIds),
+    prisma.user.findMany({
+      where: { id: { in: uniqueUserIds } },
+      select: { id: true, battlePassIsPremium: true },
+    }),
+  ]);
+  const premiumMap = new Map(premiumUsers.map((u) => [u.id, u.battlePassIsPremium]));
 
   return rows.map((r) => {
     const av = avatarMap.get(r.userId);
@@ -35,6 +45,7 @@ export async function getComments(marketId: string): Promise<CommentRow[]> {
       content:         r.content,
       createdAt:       r.createdAt.toISOString(),
       avatarEquipped:  av?.equipped,
+      isPremium:       premiumMap.get(r.userId) ?? false,
     };
   });
 }
@@ -59,6 +70,14 @@ export async function postComment(
   });
   if (!market) return { error: "Market not found" };
 
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+
+  const firstCommentToday = await prisma.comment.findFirst({
+    where: { userId: session.user.id, createdAt: { gte: todayStart } },
+    select: { id: true },
+  });
+
   await prisma.comment.create({
     data: {
       marketId,
@@ -68,6 +87,11 @@ export async function postComment(
       content,
     },
   });
+
+  // Battle Pass XP: first comment of the day (fire-and-forget)
+  if (!firstCommentToday) {
+    void awardBattlePassXp(session.user.id, BP_FIRST_COMMENT_XP);
+  }
 
   return {};
 }

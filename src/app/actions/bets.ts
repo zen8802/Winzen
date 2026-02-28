@@ -13,6 +13,8 @@ import {
   isTrendingMarket,
 } from "@/lib/gamification";
 import { computeAmmProbability } from "@/lib/probability";
+import { awardBattlePassXp, awardBpQuestXp } from "@/app/actions/battle-pass";
+import { BP_FIRST_BET_XP } from "@/lib/battle-pass";
 
 const placeBetSchema = z.object({
   marketId: z.string(),
@@ -34,7 +36,10 @@ export async function placeBet(formData: FormData) {
 
   const { marketId, outcomeId, amount } = parsed.data;
 
-  const [user, market, existingBets] = await Promise.all([
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+
+  const [user, market, existingBets, firstBetToday] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { balance: true, winStreak: true, xp: true, level: true, name: true },
@@ -46,6 +51,10 @@ export async function placeBet(formData: FormData) {
     prisma.bet.findMany({
       where: { userId: session.user.id, marketId },
       select: { outcomeId: true },
+    }),
+    prisma.bet.findFirst({
+      where: { userId: session.user.id, createdAt: { gte: todayStart } },
+      select: { id: true },
     }),
   ]);
 
@@ -218,6 +227,15 @@ export async function placeBet(formData: FormData) {
       }),
     });
   });
+
+  // ─── Battle Pass XP (fire-and-forget) ────────────────────────────────────
+  if (!firstBetToday) {
+    void awardBattlePassXp(session.user.id, BP_FIRST_BET_XP);
+  }
+  const completedMissions = missionOutcomes.filter((mo) => mo.nowCompleted);
+  if (completedMissions.length > 0) {
+    void awardBpQuestXp(session.user.id, today);
+  }
 
   // ─── Activity feed entry ──────────────────────────────────────────────────
   const side = chosenOutcome.label.toLowerCase().startsWith("yes") ? "YES" : "NO";

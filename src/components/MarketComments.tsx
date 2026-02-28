@@ -32,7 +32,7 @@ const CommentItem = memo(function CommentItem({ comment }: { comment: CommentRow
           />
         ) : (
           <div
-            className="flex h-[70px] w-10 items-center justify-center rounded-lg text-sm font-bold text-white"
+            className="flex h-14 w-14 items-center justify-center rounded-lg text-sm font-bold text-white"
             style={{ background: "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)" }}
           >
             {initial}
@@ -46,7 +46,8 @@ const CommentItem = memo(function CommentItem({ comment }: { comment: CommentRow
           {comment.userId ? (
             <Link
               href={`/users/${comment.userId}`}
-              className="text-sm font-semibold text-[var(--text)] hover:text-[var(--accent)] transition-colors"
+              className="text-sm font-semibold transition-colors hover:opacity-80"
+              style={{ color: comment.isPremium ? "#a78bfa" : "var(--text)" }}
             >
               {comment.username}
             </Link>

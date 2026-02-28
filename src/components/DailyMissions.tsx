@@ -58,7 +58,7 @@ export function DailyMissions() {
   return (
     <section>
       <h2 className="mb-3 text-lg font-semibold text-[var(--text)]">Daily Missions</h2>
-      <ul className="grid gap-3 sm:grid-cols-3">
+      <ul className={`grid gap-3 ${missions.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
         {missions.map((mission) => {
           const pct = Math.min(100, Math.round((mission.progress / mission.target) * 100));
           const isJustDone = justCompleted === mission.key;

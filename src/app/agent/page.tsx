@@ -33,10 +33,9 @@ export default async function AgentPage() {
       <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
         {/* Avatar display */}
         <div className="flex flex-col items-center gap-4">
-          <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--surface)] to-[var(--bg)] p-6">
+          <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--surface)] to-[var(--bg)] p-2">
             <Avatar equipped={equipped} size="xl" animate />
           </div>
-          <p className="text-xs text-[var(--muted)]">Idle animation · breathes + blinks</p>
         </div>
 
         {/* Right column */}
@@ -55,7 +54,7 @@ export default async function AgentPage() {
                 ? "You don't own any items yet. Head to the shop to get started!"
                 : "Want more items? Browse the full catalogue."}
             </p>
-            <Link href="/agent/shop" className="btn-primary inline-block">
+            <Link href="/agent/shop" className="btn-gradient inline-block">
               Browse Shop →
             </Link>
           </div>

@@ -13,6 +13,8 @@ import {
   CREATOR_REWARD_PER_VOLUME,
   CREATOR_REWARD_CAP,
 } from "@/lib/market-constants";
+import { getDailyMarketLimit } from "@/lib/battle-pass";
+import { awardBpQuestXp } from "@/app/actions/battle-pass";
 import {
   getDailyMissions,
   getWinMultiplier,
@@ -53,13 +55,26 @@ export async function createMarket(formData: FormData) {
 
   const { title, description, imageUrl, type, category, closesAt, outcomes } = parsed.data;
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { balance: true, winStreak: true, xp: true, level: true },
-  });
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+
+  const [user, marketsToday] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { balance: true, winStreak: true, xp: true, level: true, battlePassSeasonId: true },
+    }),
+    prisma.market.count({
+      where: { createdById: session.user.id, createdAt: { gte: todayStart } },
+    }),
+  ]);
   if (!user) return { error: "User not found" };
   if (user.balance < CREATOR_DEPOSIT) {
     return { error: `Insufficient balance. Need ${CREATOR_DEPOSIT} coins to create a market.` };
+  }
+
+  const dailyLimit = getDailyMarketLimit(!!user.battlePassSeasonId);
+  if (marketsToday >= dailyLimit) {
+    return { error: `Daily market creation limit reached (${dailyLimit}/day).` };
   }
 
   const newBalance = user.balance - CREATOR_DEPOSIT;
@@ -182,6 +197,12 @@ export async function createMarket(formData: FormData) {
 
     return m;
   });
+
+  // ─── BP XP for quest completion (fire-and-forget) ────────────────────────
+  if (missionCoinReward > 0) {
+    // missionCoinReward > 0 means the create_market mission just completed
+    void awardBpQuestXp(session.user.id, today);
+  }
 
   revalidatePath("/");
   revalidatePath("/markets");

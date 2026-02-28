@@ -30,7 +30,7 @@ export async function getGamificationData() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { loginStreak: true, winStreak: true, xp: true, level: true },
+    select: { loginStreak: true, winStreak: true, xp: true, level: true, battlePassIsPremium: true },
   });
   if (!user) return null;
 
@@ -40,7 +40,8 @@ export async function getGamificationData() {
   const currentLevelXp = xpForPrevLevel(level);
   const nextLevelXp = xpForLevel(level);
 
-  const dailyTemplates = getDailyMissions(today);
+  const missionCount = user.battlePassIsPremium ? 4 : 3;
+  const dailyTemplates = getDailyMissions(today, missionCount);
 
   const progressRecords = await prisma.userMissionProgress.findMany({
     where: {

@@ -23,6 +23,7 @@ export default async function LeaderboardPage() {
       totalLosses: true,
       totalProfit: true,
       winStreak: true,
+      battlePassIsPremium: true,
     },
     orderBy: { totalProfit: "desc" },
     take: 50,
@@ -83,7 +84,7 @@ export default async function LeaderboardPage() {
                     <Avatar equipped={av.equipped} size="sm" animate={false} />
                   ) : (
                     <div
-                      className="flex h-[70px] w-10 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
+                      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
                       style={{ background: "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)" }}
                     >
                       {user.name[0].toUpperCase()}
@@ -93,7 +94,12 @@ export default async function LeaderboardPage() {
 
                 {/* Name */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-[var(--text)]">{user.name}</p>
+                  <p
+                    className="truncate font-semibold"
+                    style={{ color: user.battlePassIsPremium ? "#a78bfa" : "var(--text)" }}
+                  >
+                    {user.name}
+                  </p>
                   <p className="text-xs text-[var(--muted)]">
                     {user.totalTrades} trade{user.totalTrades !== 1 ? "s" : ""}
                     {marketsPlayed > 0 && ` · ${user.totalWins}W / ${user.totalLosses}L`}

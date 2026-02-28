@@ -83,6 +83,12 @@ body {
   .btn-primary {
     @apply rounded-lg bg-[var(--accent)] px-4 py-2 font-medium text-white transition hover:bg-[var(--accent-dim)];
   }
+  .btn-gradient {
+    background: linear-gradient(135deg, #f472b6 0%, #a78bfa 100%);
+    @apply rounded-lg px-4 py-2 font-medium text-white transition;
+  }
+  .btn-gradient:hover { opacity: 0.85; }
+  .btn-gradient:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-ghost {
     @apply rounded-lg px-4 py-2 font-medium text-[var(--muted)] transition hover:bg-white/5 hover:text-[var(--text)];
   }
