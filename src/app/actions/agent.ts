@@ -36,7 +36,7 @@ export async function getAgentWithItems() {
   const ownedIds = new Set(purchases.map((p) => p.agentItemId));
 
   // Build icon map for equipped items
-  const equippedItemIds = [
+  const equippedIdList = [
     agent?.equippedSkinId,
     agent?.equippedEyesId,
     agent?.equippedMouthId,
@@ -49,18 +49,33 @@ export async function getAgentWithItems() {
     agent?.equippedAccessoryBackId,
   ].filter(Boolean) as string[];
 
-  const equippedItems = equippedItemIds.length
-    ? await prisma.agentItem.findMany({ where: { id: { in: equippedItemIds } } })
+  const equippedItems = equippedIdList.length
+    ? await prisma.agentItem.findMany({ where: { id: { in: equippedIdList } } })
     : [];
 
   const iconMap = new Map(equippedItems.map((i) => [i.id, i.icon ?? ""]));
   const equipped = resolveEquipped(agent, iconMap);
+
+  // Category → equipped item ID (for isEquipped checks in UI)
+  const equippedItemIds: Partial<Record<AvatarCategory, string | null>> = {
+    skin:             agent?.equippedSkinId,
+    eyes:             agent?.equippedEyesId,
+    mouth:            agent?.equippedMouthId,
+    hair:             agent?.equippedHairId,
+    top:              agent?.equippedTopId,
+    bottom:           agent?.equippedBottomId,
+    shoes:            agent?.equippedShoesId,
+    hat:              agent?.equippedHatId,
+    accessory_front:  agent?.equippedAccessoryFrontId,
+    accessory_back:   agent?.equippedAccessoryBackId,
+  };
 
   return {
     agent,
     items: items as AgentItemRow[],
     ownedIds,
     equipped,
+    equippedItemIds,
   };
 }
 

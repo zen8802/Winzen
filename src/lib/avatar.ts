@@ -60,7 +60,7 @@ export const SIZE_MAP: Record<AvatarSize, { w: number; h: number }> = {
 };
 
 export function baseUrl(): string {
-  return "/avatar/base/base.svg";
+  return "/avatar/base/BaseSquare.png";
 }
 
 // Given a UserAgent row + resolved item icons, produce the full equipped map.

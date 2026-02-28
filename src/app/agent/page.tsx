@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getAgentWithItems } from "@/app/actions/agent";
-import { AgentShop } from "./AgentShop";
 import { AgentCollection } from "./AgentCollection";
 import { Avatar } from "@/components/Avatar";
 import { AVATAR_CATEGORIES } from "@/lib/avatar";
+import Link from "next/link";
 
 export default async function AgentPage() {
   const session = await getServerSession(authOptions);
@@ -14,7 +14,7 @@ export default async function AgentPage() {
   const data = await getAgentWithItems();
   if (!data) redirect("/login");
 
-  const { items, ownedIds, equipped } = data;
+  const { items, ownedIds, equipped, equippedItemIds } = data;
 
   const ownedItems = items.filter((i) => ownedIds.has(i.id));
   const ownedByCategory = Object.fromEntries(
@@ -44,18 +44,21 @@ export default async function AgentPage() {
           {ownedItems.length > 0 && (
             <AgentCollection
               ownedByCategory={ownedByCategory}
-              equipped={equipped}
+              equippedItemIds={equippedItemIds}
             />
           )}
 
-          <section>
-            <h2 className="mb-4 text-lg font-semibold text-[var(--text)]">Shop</h2>
-            <AgentShop
-              items={items}
-              ownedIds={ownedIds}
-              equipped={equipped}
-            />
-          </section>
+          {/* Shop CTA */}
+          <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center space-y-3">
+            <p className="text-sm text-[var(--muted)]">
+              {ownedItems.length === 0
+                ? "You don't own any items yet. Head to the shop to get started!"
+                : "Want more items? Browse the full catalogue."}
+            </p>
+            <Link href="/agent/shop" className="btn-primary inline-block">
+              Browse Shop →
+            </Link>
+          </div>
         </div>
       </div>
     </div>

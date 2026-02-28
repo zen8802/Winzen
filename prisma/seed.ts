@@ -173,6 +173,27 @@ async function main() {
     });
   }
 
+  // ── Always ensure the demo red_shirt item has its icon path set ────────────
+  const existingRedShirt = await prisma.agentItem.findFirst({
+    where: { name: "Red Shirt", category: "top" },
+  });
+  if (existingRedShirt) {
+    await prisma.agentItem.update({
+      where: { id: existingRedShirt.id },
+      data:  { icon: "/avatar/items/top/red_shirt.png", price: 100 },
+    });
+  } else {
+    await prisma.agentItem.create({
+      data: {
+        category: "top",
+        name:     "Red Shirt",
+        price:    100,
+        order:    -1, // shows first in the Top tab
+        icon:     "/avatar/items/top/red_shirt.png",
+      },
+    });
+  }
+
   console.log("Seed done. Demo user: demo@winzen.app / demo123");
   console.log("Markets created:", m1.id, m2.id, m3.id, m4.id, m5.id);
   console.log("Agent items:", await prisma.agentItem.count());
