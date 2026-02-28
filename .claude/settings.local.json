@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma db push)",
+      "Bash(node -e \":*)",
+      "Bash(node -e \"const {PrismaClient}=require\\(''@prisma/client''\\);const p=new PrismaClient\\(\\);p.agentItem.findFirst\\(\\).then\\(r=>{console.log\\(JSON.stringify\\(r\\)\\);}\\).catch\\(e=>console.log\\(e.message\\)\\).finally\\(\\(\\)=>p.disconnect\\(\\)\\)\")",
+      "Bash(npx tsc --noEmit)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(npx prisma generate)",
+      "Bash(npx prisma:*)"
+    ]
+  }
+}

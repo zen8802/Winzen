@@ -13,7 +13,7 @@ export default async function AgentShopPage() {
   const data = await getAgentWithItems();
   if (!data) redirect("/login");
 
-  const { items, ownedIds, equipped, equippedItemIds } = data;
+  const { items, ownedIds, equipped, equippedItemIds, userLevel } = data;
 
   return (
     <div className="space-y-8">
@@ -45,6 +45,7 @@ export default async function AgentShopPage() {
             items={items}
             ownedIds={ownedIds}
             equippedItemIds={equippedItemIds}
+            userLevel={userLevel}
           />
         </div>
       </div>

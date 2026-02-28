@@ -180,7 +180,7 @@ async function main() {
   if (existingRedShirt) {
     await prisma.agentItem.update({
       where: { id: existingRedShirt.id },
-      data:  { icon: "/avatar/items/top/red_shirt.png", price: 100 },
+      data:  { icon: "/avatar/items/top/red_shirt1.png", price: 100 },
     });
   } else {
     await prisma.agentItem.create({
@@ -189,7 +189,7 @@ async function main() {
         name:     "Red Shirt",
         price:    100,
         order:    -1, // shows first in the Top tab
-        icon:     "/avatar/items/top/red_shirt.png",
+        icon:     "/avatar/items/top/red_shirt1.png",
       },
     });
   }

@@ -9,6 +9,20 @@ import { type AvatarCategory } from "@/lib/avatar";
 const GRAD     = "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)";
 const GRAD_DIM = "linear-gradient(135deg, rgba(244,114,182,0.12) 0%, rgba(167,139,250,0.12) 100%)";
 
+const CATEGORY_IMG_TRANSFORM: Record<string, string> = {
+  hat:             "scale(2.5)",
+  bottom:          "scale(3.0)",
+  shoes:           "scale(3.0)",
+  accessory_front: "scale(1.4)",
+};
+
+const CATEGORY_IMG_ORIGIN: Record<string, string> = {
+  hat:             "center 15%",
+  bottom:          "center 90%",
+  shoes:           "center 97%",
+  accessory_front: "center center",
+};
+
 const VISIBLE_CATEGORIES: AvatarCategory[] = ["hat", "top", "bottom", "shoes", "accessory_front"];
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -63,6 +77,7 @@ type AgentItem = {
   name:     string;
   price:    number;
   icon:     string | null;
+  tags:     string;
   order:    number;
 };
 
@@ -70,19 +85,33 @@ export function AgentShop({
   items,
   ownedIds,
   equippedItemIds,
+  userLevel,
 }: {
   items:           AgentItem[];
   ownedIds:        Set<string>;
   equippedItemIds: Partial<Record<AvatarCategory, string | null>>;
+  userLevel:       number;
 }) {
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState<AvatarCategory>(VISIBLE_CATEGORIES[0]);
   const [loading, setLoading]               = useState<string | null>(null);
   const [error, setError]                   = useState("");
+  const [query, setQuery]                   = useState("");
 
-  const filteredItems = items.filter(
-    (i) => i.category === activeCategory && VISIBLE_CATEGORIES.includes(i.category as AvatarCategory),
-  );
+  const isLocked = activeCategory === "accessory_front" && userLevel < 5;
+
+  function switchCategory(cat: AvatarCategory) {
+    setActiveCategory(cat);
+    setQuery("");
+  }
+
+  const q = query.trim().toLowerCase();
+  const filteredItems = items.filter((i) => {
+    if (i.category !== activeCategory) return false;
+    if (!q) return true;
+    if (i.name.toLowerCase().includes(q)) return true;
+    return (i.tags ?? "").split(",").some((t) => t.trim().toLowerCase().includes(q));
+  });
 
   async function handlePurchase(itemId: string) {
     setError("");
@@ -118,7 +147,7 @@ export function AgentShop({
             <button
               key={cat}
               type="button"
-              onClick={() => setActiveCategory(cat)}
+              onClick={() => switchCategory(cat)}
               title={CATEGORY_LABEL[cat]}
               style={active ? { background: GRAD_DIM } : undefined}
               className={`flex flex-1 justify-center rounded-xl p-2.5 transition ${
@@ -131,6 +160,40 @@ export function AgentShop({
             </button>
           );
         })}
+      </div>
+
+      {/* Lock gate for accessories */}
+      {isLocked ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <svg className="mb-3 h-10 w-10 text-[var(--muted)]" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V7a4.5 4.5 0 10-9 0v3.5M5 10.5h14a1 1 0 011 1V20a1 1 0 01-1 1H5a1 1 0 01-1-1v-8.5a1 1 0 011-1z" />
+          </svg>
+          <p className="font-semibold text-[var(--text)]">Opens after Level 5</p>
+          <p className="mt-1 text-sm text-[var(--muted)]">Keep trading to level up!</p>
+        </div>
+      ) : (
+      <>
+      {/* Search */}
+      <div className="relative mb-4">
+        <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
+        </svg>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Search ${CATEGORY_LABEL[activeCategory]}…`}
+          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-2 pl-9 pr-3 text-sm text-[var(--text)] placeholder-[var(--muted)] outline-none focus:border-pink-400/50"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--text)]"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {error && (
@@ -159,6 +222,7 @@ export function AgentShop({
                   <img
                     src={item.icon}
                     alt={item.name}
+                    style={{ transform: CATEGORY_IMG_TRANSFORM[item.category], transformOrigin: CATEGORY_IMG_ORIGIN[item.category] }}
                     className={`absolute inset-0 h-full w-full object-contain transition ${
                       owned ? "brightness-50" : ""
                     }`}
@@ -234,8 +298,10 @@ export function AgentShop({
 
       {filteredItems.length === 0 && (
         <p className="py-12 text-center text-sm text-[var(--muted)]">
-          No items in this category yet.
+          {q ? `No items match "${query}".` : "No items in this category yet."}
         </p>
+      )}
+      </>
       )}
     </>
   );

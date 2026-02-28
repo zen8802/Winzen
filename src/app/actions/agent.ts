@@ -15,6 +15,7 @@ export type AgentItemRow = {
   name:     string;
   price:    number;
   icon:     string | null;
+  tags:     string;
   order:    number;
 };
 
@@ -24,13 +25,14 @@ export async function getAgentWithItems() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return null;
 
-  const [agent, items, purchases] = await Promise.all([
+  const [agent, items, purchases, user] = await Promise.all([
     prisma.userAgent.findUnique({ where: { userId: session.user.id } }),
     prisma.agentItem.findMany({ orderBy: [{ category: "asc" }, { order: "asc" }] }),
     prisma.agentPurchase.findMany({
       where: { userId: session.user.id },
       select: { agentItemId: true },
     }),
+    prisma.user.findUnique({ where: { id: session.user.id }, select: { level: true } }),
   ]);
 
   const ownedIds = new Set(purchases.map((p) => p.agentItemId));
@@ -76,6 +78,7 @@ export async function getAgentWithItems() {
     ownedIds,
     equipped,
     equippedItemIds,
+    userLevel: user?.level ?? 1,
   };
 }
 
@@ -243,5 +246,18 @@ export async function equipAgentItem(formData: FormData) {
   revalidatePath("/agent/shop");
   revalidatePath("/leaderboard");
   revalidatePath(`/users/${session.user.id}`);
+  return { ok: true };
+}
+
+export async function setAdminLevel(formData: FormData) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id || session.user.role !== "admin") return { error: "Unauthorized" };
+
+  const level = parseInt(formData.get("level") as string, 10);
+  if (isNaN(level) || level < 1 || level > 100) return { error: "Invalid level (1–100)" };
+
+  await prisma.user.update({ where: { id: session.user.id }, data: { level } });
+  revalidatePath("/agent");
+  revalidatePath("/agent/shop");
   return { ok: true };
 }

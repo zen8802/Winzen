@@ -86,6 +86,7 @@ model AgentItem {
   name      String
   price     Int
   icon      String?  // path to PNG: /avatar/items/[category]/[name].png
+  tags      String   @default("") // comma-separated e.g. "Season 1,Limited"
   order     Int      @default(0)
   createdAt DateTime @default(now())
 

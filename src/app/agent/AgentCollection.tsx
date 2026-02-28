@@ -8,6 +8,20 @@ import { type AvatarCategory } from "@/lib/avatar";
 const GRAD     = "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)";
 const GRAD_DIM = "linear-gradient(135deg, rgba(244,114,182,0.12) 0%, rgba(167,139,250,0.12) 100%)";
 
+const CATEGORY_IMG_TRANSFORM: Record<string, string> = {
+  hat:             "scale(2.5)",
+  bottom:          "scale(3.0)",
+  shoes:           "scale(3.0)",
+  accessory_front: "scale(1.4)",
+};
+
+const CATEGORY_IMG_ORIGIN: Record<string, string> = {
+  hat:             "center 15%",
+  bottom:          "center 90%",
+  shoes:           "center 97%",
+  accessory_front: "center center",
+};
+
 const VISIBLE_CATEGORIES: AvatarCategory[] = ["hat", "top", "bottom", "shoes", "accessory_front"];
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -71,11 +85,16 @@ type AgentItem = {
 export function AgentCollection({
   ownedByCategory,
   equippedItemIds,
+  userLevel,
 }: {
   ownedByCategory:  Record<string, AgentItem[]>;
   equippedItemIds:  Partial<Record<AvatarCategory, string | null>>;
+  userLevel:        number;
 }) {
   const router  = useRouter();
+  const visibleCategories = VISIBLE_CATEGORIES.filter(
+    (cat) => cat !== "accessory_front" || userLevel >= 5
+  );
   const [activeCategory, setActiveCategory] = useState<AvatarCategory>(VISIBLE_CATEGORIES[0]);
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -95,9 +114,9 @@ export function AgentCollection({
     <section className="space-y-4">
       <h2 className="text-lg font-semibold text-[var(--text)]">My Collection</h2>
 
-      {/* Category icon tabs — always show all 5, spread full width */}
+      {/* Category icon tabs */}
       <div className="flex border-b border-[var(--border)] pb-3">
-        {VISIBLE_CATEGORIES.map((cat) => {
+        {visibleCategories.map((cat) => {
           const active = activeCategory === cat;
           return (
             <button
@@ -150,6 +169,7 @@ export function AgentCollection({
                     <img
                       src={item.icon}
                       alt={item.name}
+                      style={{ transform: CATEGORY_IMG_TRANSFORM[item.category], transformOrigin: CATEGORY_IMG_ORIGIN[item.category] }}
                       className="absolute inset-0 h-full w-full object-contain"
                       draggable={false}
                     />

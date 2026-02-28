@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getAgentWithItems } from "@/app/actions/agent";
 import { AgentCollection } from "./AgentCollection";
+import { AdminLevelSetter } from "./AdminLevelSetter";
 import { Avatar } from "@/components/Avatar";
 import { AVATAR_CATEGORIES } from "@/lib/avatar";
 import Link from "next/link";
@@ -14,7 +15,7 @@ export default async function AgentPage() {
   const data = await getAgentWithItems();
   if (!data) redirect("/login");
 
-  const { items, ownedIds, equipped, equippedItemIds } = data;
+  const { items, ownedIds, equipped, equippedItemIds, userLevel } = data;
 
   const ownedItems = items.filter((i) => ownedIds.has(i.id));
   const ownedByCategory = Object.fromEntries(
@@ -39,6 +40,9 @@ export default async function AgentPage() {
           <p className="text-sm font-semibold text-[var(--text)]">
             {session.user.name ?? "Anonymous"}
           </p>
+          {session.user.role === "admin" && (
+            <AdminLevelSetter currentLevel={userLevel} />
+          )}
         </div>
 
         {/* Right column */}
@@ -47,6 +51,7 @@ export default async function AgentPage() {
             <AgentCollection
               ownedByCategory={ownedByCategory}
               equippedItemIds={equippedItemIds}
+              userLevel={userLevel}
             />
           )}
 

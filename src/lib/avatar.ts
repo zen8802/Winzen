@@ -1,7 +1,7 @@
 // ─── Avatar system ────────────────────────────────────────────────────────────
 //
 // Rendering order (bottom → top z-index):
-//   accessory_back → base → skin → bottom → top → shoes → eyes → mouth → hair → hat → accessory_front
+//   accessory_back → base → skin → eyes → mouth → hair → top → bottom → shoes → accessory_front → hat
 //
 // All images share the same 1000×1000 square canvas with transparent background.
 // Equipped layers are absolute-positioned over the base body.
@@ -17,14 +17,14 @@ export const LAYER_ORDER = [
   "accessory_back",
   "base",
   "skin",
-  "bottom",
-  "top",
-  "shoes",
   "eyes",
   "mouth",
   "hair",
-  "hat",
+  "top",
+  "bottom",
+  "shoes",
   "accessory_front",
+  "hat",
 ] as const;
 
 export type AvatarLayer    = (typeof LAYER_ORDER)[number];
