@@ -111,7 +111,7 @@ export function AgentShop({
   return (
     <>
       {/* Category icon tabs */}
-      <div className="mb-4 flex gap-1 border-b border-[var(--border)] pb-3">
+      <div className="mb-4 flex border-b border-[var(--border)] pb-3">
         {VISIBLE_CATEGORIES.map((cat) => {
           const active = activeCategory === cat;
           return (
@@ -121,7 +121,7 @@ export function AgentShop({
               onClick={() => setActiveCategory(cat)}
               title={CATEGORY_LABEL[cat]}
               style={active ? { background: GRAD_DIM } : undefined}
-              className={`rounded-xl p-2.5 transition ${
+              className={`flex flex-1 justify-center rounded-xl p-2.5 transition ${
                 active
                   ? "text-pink-400 border border-pink-400/30"
                   : "text-[var(--muted)] hover:bg-white/5 hover:text-[var(--text)]"
@@ -192,13 +192,13 @@ export function AgentShop({
 
               {/* Info + action */}
               <div className="space-y-2 p-3">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="truncate text-sm font-medium text-[var(--text)]">{item.name}</span>
+                <div>
+                  <p className="truncate text-sm font-medium text-[var(--text)]">{item.name}</p>
                   {!owned && (
-                    <span className="inline-flex shrink-0 items-center gap-1 font-mono text-xs text-[var(--coin)]">
+                    <p className="inline-flex items-center gap-1 font-mono text-xs text-[var(--coin)]">
                       <CoinIcon size={12} />
                       {item.price.toLocaleString()}
-                    </span>
+                    </p>
                   )}
                 </div>
 
@@ -209,7 +209,7 @@ export function AgentShop({
                     disabled={!!loading}
                     className="btn-gradient w-full text-xs py-1.5"
                   >
-                    {busy ? "Buying…" : `Buy · ${item.price.toLocaleString()}`}
+                    {busy ? "Buying…" : "Buy"}
                   </button>
                 ) : (
                   <button

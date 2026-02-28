@@ -32,10 +32,13 @@ export default async function AgentPage() {
 
       <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
         {/* Avatar display */}
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-3">
           <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--surface)] to-[var(--bg)] p-2">
             <Avatar equipped={equipped} size="xl" animate />
           </div>
+          <p className="text-sm font-semibold text-[var(--text)]">
+            {session.user.name ?? "Anonymous"}
+          </p>
         </div>
 
         {/* Right column */}

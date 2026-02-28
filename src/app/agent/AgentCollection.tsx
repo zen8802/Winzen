@@ -92,11 +92,11 @@ export function AgentCollection({
   }
 
   return (
-    <section className="card space-y-4">
+    <section className="space-y-4">
       <h2 className="text-lg font-semibold text-[var(--text)]">My Collection</h2>
 
-      {/* Category icon tabs — always show all 5 */}
-      <div className="flex gap-1 border-b border-[var(--border)] pb-3">
+      {/* Category icon tabs — always show all 5, spread full width */}
+      <div className="flex border-b border-[var(--border)] pb-3">
         {VISIBLE_CATEGORIES.map((cat) => {
           const active = activeCategory === cat;
           return (
@@ -106,7 +106,7 @@ export function AgentCollection({
               onClick={() => setActiveCategory(cat)}
               title={CATEGORY_LABEL[cat]}
               style={active ? { background: GRAD_DIM } : undefined}
-              className={`rounded-xl p-2.5 transition ${
+              className={`flex flex-1 justify-center rounded-xl p-2.5 transition ${
                 active
                   ? "text-pink-400 border border-pink-400/30"
                   : "text-[var(--muted)] hover:bg-white/5 hover:text-[var(--text)]"
