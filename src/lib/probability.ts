@@ -22,17 +22,24 @@ export function computeProbabilities(
  * AMM liquidity-based pricing for YES/NO markets.
  * Returns the new YES probability (1–99 scale) after a bet is placed.
  *
- * @param current  Current YES probability (1–99)
- * @param amount   Coins staked
- * @param direction  +1 for YES bet, -1 for NO bet
- * @param liquidity  Market liquidity parameter (default 1,000)
+ * Effective liquidity grows with total volume so active markets become
+ * progressively harder to move — approximating a constant-product AMM:
+ *   effectiveLiquidity = baseLiquidity + totalVolume × 0.5
+ *
+ * @param current      Current YES probability (1–99)
+ * @param amount       Coins staked
+ * @param direction    +1 for YES bet, -1 for NO bet
+ * @param liquidity    Base liquidity set at market creation
+ * @param totalVolume  Total coins already traded in this market
  */
 export function computeAmmProbability(
   current: number,
   amount: number,
   direction: 1 | -1,
   liquidity: number,
+  totalVolume = 0,
 ): number {
-  const delta = amount / liquidity;
+  const effectiveLiquidity = liquidity + totalVolume * 0.5;
+  const delta = amount / effectiveLiquidity;
   return Math.min(99, Math.max(1, current + direction * delta * 100));
 }

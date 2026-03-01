@@ -72,12 +72,13 @@ export interface MissionTemplate {
   target: number;
   reward: number;
   label: string;
+  uniqueMarkets?: boolean; // if true, only counts first bet per market per day
 }
 
 export const MISSION_TEMPLATES: MissionTemplate[] = [
-  { key: "place_2_bets",  type: "place_bets",    target: 2, reward: 500, label: "Place 2 bets" },
-  { key: "place_3_bets",  type: "place_bets",    target: 3, reward: 700, label: "Place 3 bets" },
-  { key: "place_5_bets",  type: "place_bets",    target: 5, reward: 1000, label: "Place 5 bets" },
+  { key: "place_2_bets",  type: "place_bets",    target: 2, reward: 500,  label: "Place 2 bets" },
+  { key: "place_3_bets",  type: "place_bets",    target: 3, reward: 700,  label: "Place 3 bets" },
+  { key: "place_5_bets",  type: "place_bets",    target: 5, reward: 1000, label: "Bet on 5 different markets", uniqueMarkets: true },
   { key: "win_1_bet",     type: "win_bets",       target: 1, reward: 500, label: "Win 1 bet" },
   { key: "win_2_bets",    type: "win_bets",       target: 2, reward: 800, label: "Win 2 bets" },
   { key: "bet_trending",  type: "bet_trending",   target: 1, reward: 300, label: "Bet on a trending market" },

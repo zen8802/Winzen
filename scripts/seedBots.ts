@@ -24,7 +24,7 @@ const BOT_COUNT = 100;
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function randomBalance(): number {
-  return Math.floor(Math.random() * (20_000 - 5_000 + 1)) + 5_000;
+  return Math.floor(Math.random() * (500_000 - 100_000 + 1)) + 100_000;
 }
 
 function strategyForIndex(i: number): string {

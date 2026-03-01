@@ -61,7 +61,7 @@ export async function createMarket(formData: FormData) {
   const [user, marketsToday] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { balance: true, winStreak: true, xp: true, level: true, battlePassSeasonId: true },
+      select: { balance: true, winStreak: true, xp: true, level: true, battlePassSeasonId: true, battlePassIsPremium: true, role: true },
     }),
     prisma.market.count({
       where: { createdById: session.user.id, createdAt: { gte: todayStart } },
@@ -72,9 +72,11 @@ export async function createMarket(formData: FormData) {
     return { error: `Insufficient balance. Need ${CREATOR_DEPOSIT} coins to create a market.` };
   }
 
-  const dailyLimit = getDailyMarketLimit(!!user.battlePassSeasonId);
-  if (marketsToday >= dailyLimit) {
-    return { error: `Daily market creation limit reached (${dailyLimit}/day).` };
+  if (user.role !== "admin") {
+    const dailyLimit = getDailyMarketLimit(!!user.battlePassSeasonId);
+    if (marketsToday >= dailyLimit) {
+      return { error: `Daily market creation limit reached (${dailyLimit}/day).` };
+    }
   }
 
   const newBalance = user.balance - CREATOR_DEPOSIT;
@@ -82,7 +84,7 @@ export async function createMarket(formData: FormData) {
   // ─── XP + missions for creating a market ──────────────────────────────────
   const xpGained = getXpForAction("create_market");
   const today = new Date().toISOString().slice(0, 10);
-  const dailyMissions = getDailyMissions(today);
+  const dailyMissions = getDailyMissions(today, user.battlePassIsPremium ? 4 : 3);
   const createMission = dailyMissions.find((m) => m.type === "create_market");
 
   let missionCoinReward = 0;
@@ -314,13 +316,15 @@ export async function resolveMarket(formData: FormData) {
 
   // ─── Gamification setup ───────────────────────────────────────────────────
   const today = new Date().toISOString().slice(0, 10);
-  const dailyMissions = getDailyMissions(today);
-  const winBetsMission = dailyMissions.find((m) => m.type === "win_bets");
+  // Fetch max (4) missions so premium users' 4th slot is included
+  const dailyMissions4 = getDailyMissions(today, 4);
+  const dailyMissions3 = getDailyMissions(today, 3);
+  const winBetsMission = dailyMissions4.find((m) => m.type === "win_bets");
 
   const affectedUserIds = Array.from(userSummaryMap.keys());
   const affectedUsers = await prisma.user.findMany({
     where: { id: { in: affectedUserIds } },
-    select: { id: true, balance: true, winStreak: true, xp: true, level: true, eloRating: true, name: true },
+    select: { id: true, balance: true, winStreak: true, xp: true, level: true, eloRating: true, name: true, battlePassIsPremium: true },
   });
   const userMap = new Map(affectedUsers.map((u) => [u.id, u]));
 
@@ -385,7 +389,9 @@ export async function resolveMarket(formData: FormData) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const missionOps: any[] = [];
 
-      if (winBetsMission) {
+      const userMissions = betUser.battlePassIsPremium ? dailyMissions4 : dailyMissions3;
+      const userWinBetsMission = userMissions.find((m) => m.type === "win_bets");
+      if (userWinBetsMission && winBetsMission?.key === userWinBetsMission.key) {
         const prog = winProgressMap.get(summary.userId);
         if (!prog?.completed) {
           const newProg = (prog?.progress ?? 0) + 1;
@@ -416,7 +422,7 @@ export async function resolveMarket(formData: FormData) {
           );
           if (nowCompleted) {
             const multiplier = getWinMultiplier(newWinStreak);
-            extraCoins = Math.floor(winBetsMission.reward * multiplier);
+            extraCoins = Math.floor(userWinBetsMission.reward * multiplier);
             extraXp += getXpForAction("complete_mission");
             if (extraCoins > 0) {
               missionOps.push(
@@ -425,7 +431,7 @@ export async function resolveMarket(formData: FormData) {
                     userId: summary.userId,
                     type: "mission_reward",
                     amount: extraCoins,
-                    referenceId: winBetsMission.key,
+                    referenceId: userWinBetsMission.key,
                   },
                 }),
               );

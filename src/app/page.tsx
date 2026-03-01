@@ -20,8 +20,8 @@ async function getMarkets(tab: string | null) {
   if (tab && VALID_TABS.includes(tab as (typeof VALID_TABS)[number]) && tab !== "trending") {
     return prisma.market.findMany({
       ...baseQuery,
-      where: { category: tab },
-      orderBy: { createdAt: "desc" },
+      where: { category: tab, resolvedAt: null },
+      orderBy: { closesAt: "asc" },
       take: 20,
     });
   }
@@ -29,7 +29,8 @@ async function getMarkets(tab: string | null) {
   // Trending: sort by total pool (sum of bets) descending
   const all = await prisma.market.findMany({
     ...baseQuery,
-    orderBy: { createdAt: "desc" },
+    where: { resolvedAt: null },
+    orderBy: { closesAt: "asc" },
     take: 50,
   });
   const withTotal = all

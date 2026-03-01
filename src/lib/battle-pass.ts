@@ -85,9 +85,9 @@ export function applyBpXp(
 // ─── Market creation limit ─────────────────────────────────────────────────────
 
 /** Daily cap for non-battle-pass users */
-export const DAILY_MARKET_LIMIT_BASE = 5;
+export const DAILY_MARKET_LIMIT_BASE = 1;
 /** Daily cap for any battle-pass participant (either track) */
-export const DAILY_MARKET_LIMIT_BP = 6;
+export const DAILY_MARKET_LIMIT_BP = 2;
 
 /** Returns the market creation limit for a user. */
 export function getDailyMarketLimit(hasBattlePass: boolean): number {

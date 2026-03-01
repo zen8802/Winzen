@@ -14,7 +14,8 @@
       "Bash(xargs grep -l \"battle.pass\\\\|battlepass\\\\|BattlePass\\\\|tier\\\\|Tier\")",
       "Bash(npx tsx prisma/seed-battle-pass.ts)",
       "Bash(npx tsx -e \":*)",
-      "Bash(npx tsx prisma/patch-bp-tiers.ts)"
+      "Bash(npx tsx prisma/patch-bp-tiers.ts)",
+      "Bash(grep -n \"PlaceBetForm\\\\|totalVolume\\\\|liquidity\" c:/dev/Winzen/src/app/markets/[id]/page.tsx)"
     ]
   }
 }

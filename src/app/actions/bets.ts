@@ -39,10 +39,10 @@ export async function placeBet(formData: FormData) {
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
 
-  const [user, market, existingBets, firstBetToday] = await Promise.all([
+  const [user, market, existingBets, firstBetToday, betOnMarketToday] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { balance: true, winStreak: true, xp: true, level: true, name: true },
+      select: { balance: true, winStreak: true, xp: true, level: true, name: true, battlePassIsPremium: true },
     }),
     prisma.market.findUnique({
       where: { id: marketId },
@@ -54,6 +54,10 @@ export async function placeBet(formData: FormData) {
     }),
     prisma.bet.findFirst({
       where: { userId: session.user.id, createdAt: { gte: todayStart } },
+      select: { id: true },
+    }),
+    prisma.bet.findFirst({
+      where: { userId: session.user.id, marketId, createdAt: { gte: todayStart } },
       select: { id: true },
     }),
   ]);
@@ -75,6 +79,7 @@ export async function placeBet(formData: FormData) {
     amount,
     direction,
     market.liquidity,
+    market.totalVolume,
   );
   // entryProbability = probability of the CHOSEN outcome (1–99 scale)
   const entryProbability = isYes ? newYesProb : 100 - newYesProb;
@@ -90,7 +95,8 @@ export async function placeBet(formData: FormData) {
 
   // ─── Daily missions ───────────────────────────────────────────────────────
   const today = new Date().toISOString().slice(0, 10);
-  const dailyMissions = getDailyMissions(today);
+  const missionCount = user.battlePassIsPremium ? 4 : 3;
+  const dailyMissions = getDailyMissions(today, missionCount);
   const isTrending = isTrendingMarket(market.totalVolume, market.participantCount);
 
   const relevantMissions = dailyMissions.filter(
@@ -120,6 +126,9 @@ export async function placeBet(formData: FormData) {
   for (const mission of relevantMissions) {
     const existing = progressMap.get(mission.key);
     if (existing?.completed) continue;
+
+    // uniqueMarkets missions only count the first bet per market per day
+    if (mission.uniqueMarkets && betOnMarketToday) continue;
 
     const currentProgress = existing?.progress ?? 0;
     const newProgress = currentProgress + 1;

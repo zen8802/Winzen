@@ -15,12 +15,14 @@ export function PlaceBetForm({
   currentProbability,
   userBalance,
   liquidity,
+  totalVolume,
 }: {
   marketId: string;
   outcomes: { id: string; label: string }[];
   currentProbability: number; // 1–99, probability of YES
   userBalance: number;
   liquidity: number;
+  totalVolume: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -42,13 +44,13 @@ export function PlaceBetForm({
   // Preview: compute new probability and shares if this bet were placed
   const preview = useMemo(() => {
     if (!validAmount) return null;
-    const newYesProb = computeAmmProbability(currentProbability, amountNum, isYesSelected ? 1 : -1, liquidity);
+    const newYesProb = computeAmmProbability(currentProbability, amountNum, isYesSelected ? 1 : -1, liquidity, totalVolume);
     const entryProb = isYesSelected ? newYesProb : 100 - newYesProb;
     const shares = amountNum / entryProb;
     const maxWin = Math.floor(shares * 100);
     const multiplier = 100 / entryProb;
     return { newYesProb, entryProb, shares, maxWin, pnl: maxWin - amountNum, multiplier };
-  }, [validAmount, amountNum, isYesSelected, currentProbability, liquidity]);
+  }, [validAmount, amountNum, isYesSelected, currentProbability, liquidity, totalVolume]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -257,6 +257,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
             currentProbability={market.currentProbability}
             userBalance={userBalance}
             liquidity={market.liquidity}
+            totalVolume={market.totalVolume}
           />
         )}
 

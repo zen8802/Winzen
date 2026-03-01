@@ -176,8 +176,10 @@ function computeAmmProbability(
   amount: number,
   direction: 1 | -1,
   liquidity: number,
+  totalVolume = 0,
 ): number {
-  return Math.min(99, Math.max(1, current + direction * (amount / liquidity) * 100));
+  const effectiveLiquidity = liquidity + totalVolume * 0.5;
+  return Math.min(99, Math.max(1, current + direction * (amount / effectiveLiquidity) * 100));
 }
 
 // ─── Strategy helpers ─────────────────────────────────────────────────────────
@@ -194,6 +196,7 @@ function getBetAmount(
   balance: number,
   state: BotState,
   duringSpike: boolean,
+  liquidity: number,
 ): number {
   const r = Math.random();
   let base: number;
@@ -206,7 +209,9 @@ function getBetAmount(
   }
   const aggrMult  = state.aggression === "high" ? 1.5 : state.aggression === "low" ? 0.7 : 1.0;
   const spikeMult = duringSpike ? SIM_CONFIG.spikeBetMultiplier : 1.0;
-  return Math.min(Math.floor(base * aggrMult * spikeMult), balance);
+  // Cap individual bets to 5% of liquidity so no single bet swings the market more than 5 points
+  const liquidityCap = Math.floor(liquidity * 0.05);
+  return Math.min(Math.floor(base * aggrMult * spikeMult), balance, liquidityCap);
 }
 
 function getSide(
@@ -219,7 +224,11 @@ function getSide(
   // Preferred side stickiness (60% chance to repeat)
   if (state.preferredSide && Math.random() < 0.60) return state.preferredSide;
   switch (strategy) {
-    case "trend_follower": return currentYesProb >= 50 ? "YES" : "NO";
+    // Trend followers only chase momentum up to 80% — beyond that they back off
+    case "trend_follower":
+      if (currentYesProb >= 80) return "YES";
+      if (currentYesProb <= 20) return "NO";
+      return currentYesProb >= 50 ? "YES" : "NO";
     case "contrarian":     return currentYesProb >= 50 ? "NO"  : "YES";
     default:               return Math.random() < 0.5   ? "YES" : "NO";
   }
@@ -239,6 +248,7 @@ interface MarketRow {
   title: string;
   currentProbability: number;
   liquidity: number;
+  totalVolume: number;
   outcomes: Array<{ id: string; label: string }>;
 }
 
@@ -261,12 +271,18 @@ async function executeBotAction(bot: BotRow, market: MarketRow): Promise<boolean
 
   const side      = getSide(strategy, market.currentProbability, state);
   const isYes     = side === "YES";
+
+  // Skip if the bot would push an already-extreme market even further
+  const prob = market.currentProbability;
+  if (isYes  && prob >= 92) return false;
+  if (!isYes && prob <=  8) return false;
+
   const chosen    = isYes ? yesOutcome : noOutcome;
   const direction: 1 | -1 = isYes ? 1 : -1;
-  const amount    = getBetAmount(strategy, bot.balance, state, spikeActive);
+  const amount    = getBetAmount(strategy, bot.balance, state, spikeActive, market.liquidity + market.totalVolume * 0.5);
   if (amount < 1) return false;
 
-  const newYesProb       = computeAmmProbability(market.currentProbability, amount, direction, market.liquidity);
+  const newYesProb       = computeAmmProbability(market.currentProbability, amount, direction, market.liquidity, market.totalVolume);
   const entryProbability = isYes ? newYesProb : 100 - newYesProb;
   const shares           = amount / entryProbability;
   const snapshotNow      = new Date();
@@ -386,8 +402,11 @@ async function tick(): Promise<void> {
       select: { id: true, name: true, email: true, balance: true },
     }),
     prisma.market.findMany({
-      where:   { resolvedOutcomeId: null, closesAt: { gt: new Date() }, type: "yes_no" },
-      include: { outcomes: { orderBy: { order: "asc" as const } } },
+      where:  { resolvedOutcomeId: null, closesAt: { gt: new Date() }, type: "yes_no" },
+      select: {
+        id: true, title: true, currentProbability: true, liquidity: true, totalVolume: true,
+        outcomes: { orderBy: { order: "asc" as const } },
+      },
     }),
   ]);
 

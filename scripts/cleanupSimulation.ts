@@ -20,8 +20,10 @@ function computeAmmProbability(
   amount: number,
   direction: 1 | -1,
   liquidity: number,
+  totalVolume = 0,
 ): number {
-  return Math.min(99, Math.max(1, current + direction * (amount / liquidity) * 100));
+  const effectiveLiquidity = liquidity + totalVolume * 0.5;
+  return Math.min(99, Math.max(1, current + direction * (amount / effectiveLiquidity) * 100));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -118,11 +120,14 @@ async function main() {
       const uniqueParticipants = new Set(remainingBets.map(b => b.userId)).size;
 
       // Replay AMM from 50 → get accurate final probability
+      // Track running volume so each bet uses the correct effective liquidity
       let prob = 50;
+      let runningVolume = 0;
       for (const bet of remainingBets) {
         const isYes    = bet.outcome.label.toLowerCase().startsWith("yes");
         const dir: 1 | -1 = isYes ? 1 : -1;
-        prob = computeAmmProbability(prob, bet.amount, dir, market.liquidity);
+        prob = computeAmmProbability(prob, bet.amount, dir, market.liquidity, runningVolume);
+        runningVolume += bet.amount;
       }
 
       await prisma.market.update({
