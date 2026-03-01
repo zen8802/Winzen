@@ -8,11 +8,14 @@ export type SnapshotRow = {
   recordedAt: string; // ISO string
 };
 
-export type BetPosition = {
+export type BetPositionEntry = {
   outcomeId: string;
   entryProbability: number; // 1–99
   entryTimestamp: string;   // ISO string of bet.createdAt
-} | null;
+};
+
+/** All of the user's open (not cashed-out) positions on this market. */
+export type BetPosition = BetPositionEntry[] | null;
 
 export async function getMarketSnapshots(marketId: string): Promise<SnapshotRow[]> {
   // Fetch newest 400 rows desc, then reverse so chart is chronological.
@@ -36,15 +39,15 @@ export async function getUserBetPosition(
   marketId: string,
   userId: string,
 ): Promise<BetPosition> {
-  const bet = await prisma.bet.findFirst({
-    where: { marketId, userId },
+  const bets = await prisma.bet.findMany({
+    where: { marketId, userId, closedAt: null, entryProbability: { not: null } },
     orderBy: { createdAt: "asc" },
     select: { outcomeId: true, entryProbability: true, createdAt: true },
   });
-  if (!bet || bet.entryProbability === null) return null;
-  return {
-    outcomeId: bet.outcomeId,
-    entryProbability: bet.entryProbability,
-    entryTimestamp: bet.createdAt.toISOString(),
-  };
+  if (bets.length === 0) return null;
+  return bets.map((b) => ({
+    outcomeId:        b.outcomeId,
+    entryProbability: b.entryProbability!,
+    entryTimestamp:   b.createdAt.toISOString(),
+  }));
 }

@@ -25,6 +25,7 @@ model User {
   totalLosses   Int       @default(0) // markets resolved against user
   totalProfit   Int       @default(0) // net coins gained/lost from resolved markets
   isBot         Boolean   @default(false)   // true = simulation bot, never a real user
+  allowTradeVisibility Boolean @default(true) // if false, other users cannot see this user's chart entries
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -44,6 +45,8 @@ model User {
   notifications      Notification[]
   settings           UserSettings?
   claimedRewards     ClaimedReward[]
+  followers          Follow[]              @relation("Following")
+  following          Follow[]              @relation("Follower")
 }
 
 model UserMissionProgress {
@@ -119,7 +122,7 @@ model Market {
   resolvedOutcomeId  String?   // set when market is resolved
   resolvedAt         DateTime? // timestamp of resolution — used to archive bets after 1 hour
   currentProbability Float     @default(50) // 1–99, probability of YES outcome (AMM price)
-  liquidity          Int       @default(1000) // AMM liquidity parameter; 100-coin bet moves price ~10%
+  liquidity          Int       @default(10000) // AMM liquidity parameter; 100-coin bet moves price ~1%
   closesAt           DateTime
   createdAt          DateTime  @default(now())
   createdById        String
@@ -299,6 +302,20 @@ model ClaimedReward {
 
   @@unique([userId, rewardId])
   @@index([userId, seasonId])
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("Follower",  fields: [followerId],  references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
 }
 
 // Ephemeral global activity log — capped at 200 rows, no FK constraints for simplicity

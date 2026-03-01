@@ -11,6 +11,7 @@ import { MarketComments } from "@/components/MarketComments";
 import { getMarketSnapshots, getUserBetPosition } from "@/app/actions/charts";
 import { getComments } from "@/app/actions/comments";
 import { getUserAvatarData } from "@/app/actions/agent";
+import { getFollowedTradesOnMarket } from "@/app/actions/social";
 import { CoinIcon } from "@/components/CoinIcon";
 import { MarketImage } from "@/components/MarketImage";
 import Link from "next/link";
@@ -53,11 +54,6 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
   const isCreator = session?.user?.id === market.createdById;
   const canResolve = isCreator && !resolved && new Date() >= market.closesAt;
   const marketClosed = resolved || new Date() >= market.closesAt;
-
-  const yesProb = market.currentProbability;
-  const noProb = 100 - yesProb;
-  const yesMultiplier = (100 / yesProb).toFixed(2);
-  const noMultiplier = (100 / noProb).toFixed(2);
 
   // User's open positions on this market
   let userOpenBets: Array<{
@@ -104,12 +100,13 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
     userBalance = u?.balance ?? 0;
   }
 
-  const [initialSnapshots, userPosition, initialComments, delta24h, currentUserAvatar] = await Promise.all([
+  const [initialSnapshots, userPosition, initialComments, delta24h, currentUserAvatar, followedTrades] = await Promise.all([
     getMarketSnapshots(id),
     session?.user?.id ? getUserBetPosition(id, session.user.id) : Promise.resolve(null),
     getComments(id),
     get24hDelta(market),
     session?.user?.id ? getUserAvatarData(session.user.id) : Promise.resolve(null),
+    session?.user?.id ? getFollowedTradesOnMarket(id) : Promise.resolve([]),
   ]);
 
   return (
@@ -150,25 +147,6 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           </p>
         </div>
 
-        {/* Current Probability Display */}
-        <div className="flex items-center gap-3 sm:gap-6 rounded-xl border border-[var(--border)] bg-white/[0.02] p-4">
-          <div className="flex-1 text-center">
-            <p className="text-2xl sm:text-3xl font-extrabold text-green-400">{yesProb.toFixed(1)}%</p>
-            <p className="mt-0.5 text-sm font-semibold text-green-400/70">{yesMultiplier}×</p>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-              YES
-            </p>
-          </div>
-          <div className="h-14 w-px bg-[var(--border)]" />
-          <div className="flex-1 text-center">
-            <p className="text-2xl sm:text-3xl font-extrabold text-orange-400">{noProb.toFixed(1)}%</p>
-            <p className="mt-0.5 text-sm font-semibold text-orange-400/70">{noMultiplier}×</p>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-              NO
-            </p>
-          </div>
-        </div>
-
         {/* Market stats row */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--muted)]">
           <span className="inline-flex items-center gap-1">
@@ -198,8 +176,23 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
             initialSnapshots={initialSnapshots}
             userPosition={userPosition}
             marketClosed={marketClosed}
+            userEquipped={currentUserAvatar?.equipped ?? {}}
+            userName={session?.user?.name ?? undefined}
+            followedTrades={followedTrades}
           />
         </div>
+
+        {/* Bet Form */}
+        {session?.user && !resolved && new Date() < market.closesAt && (
+          <PlaceBetForm
+            marketId={market.id}
+            outcomes={market.outcomes}
+            currentProbability={market.currentProbability}
+            userBalance={userBalance}
+            liquidity={market.liquidity}
+            totalVolume={market.totalVolume}
+          />
+        )}
 
         {/* User Positions */}
         {userOpenBets.length > 0 && (
@@ -214,7 +207,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <p
                       className="font-semibold"
-                      style={{ color: pos.isYes ? "#22c55e" : "#f97316" }}
+                      style={{ color: pos.isYes ? "#22c55e" : "#3b82f6" }}
                     >
                       {pos.outcomeLabel}
                     </p>
@@ -247,18 +240,6 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
               ))}
             </ul>
           </div>
-        )}
-
-        {/* Bet Form */}
-        {session?.user && !resolved && new Date() < market.closesAt && (
-          <PlaceBetForm
-            marketId={market.id}
-            outcomes={market.outcomes}
-            currentProbability={market.currentProbability}
-            userBalance={userBalance}
-            liquidity={market.liquidity}
-            totalVolume={market.totalVolume}
-          />
         )}
 
         {canResolve && <ResolveForm marketId={market.id} outcomes={market.outcomes} />}

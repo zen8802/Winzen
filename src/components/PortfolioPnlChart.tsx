@@ -77,8 +77,7 @@ export function PortfolioPnlChart({ snapshots }: { snapshots: PnlSnapshot[] }) {
 
   const first = filtered[0]?.totalValue ?? 0;
   const last = filtered[filtered.length - 1]?.totalValue ?? 0;
-  const isPositive = last >= first;
-  const color = isPositive ? "#22c55e" : "#f97316";
+  const deltaColor = last >= first ? "#22c55e" : "#f97316";
 
   if (chartData.length === 0) {
     return (
@@ -94,13 +93,16 @@ export function PortfolioPnlChart({ snapshots }: { snapshots: PnlSnapshot[] }) {
           <button
             key={r.value}
             onClick={() => setRange(r.value)}
-            className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+            className="rounded-lg px-3 py-1 text-xs font-semibold transition"
+            style={
               range === r.value
-                ? "bg-[var(--accent)] text-white"
-                : "text-[var(--muted)] hover:text-[var(--text)]"
-            }`}
+                ? { background: "linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)", color: "#fff" }
+                : undefined
+            }
           >
-            {r.label}
+            <span className={range !== r.value ? "text-[var(--muted)] hover:text-[var(--text)]" : ""}>
+              {r.label}
+            </span>
           </button>
         ))}
       </div>
@@ -110,7 +112,7 @@ export function PortfolioPnlChart({ snapshots }: { snapshots: PnlSnapshot[] }) {
         <span className="font-mono text-lg font-bold text-[var(--text)]">
           {last.toLocaleString()} coins
         </span>
-        <span className="font-mono text-sm" style={{ color }}>
+        <span className="font-mono text-sm" style={{ color: deltaColor }}>
           {last - first >= 0 ? "+" : ""}
           {(last - first).toLocaleString()} (
           {first > 0 ? (((last - first) / first) * 100).toFixed(1) : "—"}%)
@@ -120,9 +122,15 @@ export function PortfolioPnlChart({ snapshots }: { snapshots: PnlSnapshot[] }) {
       <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
           <defs>
-            <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.3} />
-              <stop offset="95%" stopColor={color} stopOpacity={0} />
+            {/* Horizontal stroke gradient: pink → purple */}
+            <linearGradient id="pnlStrokeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#f472b6" />
+              <stop offset="100%" stopColor="#a78bfa" />
+            </linearGradient>
+            {/* Vertical fill gradient: purple tint → transparent */}
+            <linearGradient id="pnlFillGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#f472b6" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
@@ -143,9 +151,9 @@ export function PortfolioPnlChart({ snapshots }: { snapshots: PnlSnapshot[] }) {
           <Area
             type="monotone"
             dataKey="value"
-            stroke={color}
+            stroke="url(#pnlStrokeGrad)"
             strokeWidth={2}
-            fill="url(#pnlGrad)"
+            fill="url(#pnlFillGrad)"
             isAnimationActive={false}
             dot={chartData.length <= 2}
           />

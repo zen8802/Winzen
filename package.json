@@ -16,7 +16,8 @@
     "simulate:migrate": "tsx scripts/migrateBotNames.ts",
     "simulate": "tsx scripts/runSimulation.ts",
     "cleanup:bots": "tsx scripts/cleanupSimulation.ts",
-    "seed:nba": "tsx scripts/seedNbaMarkets.ts"
+    "seed:nba": "tsx scripts/seedNbaMarkets.ts",
+    "backfill:nba-images": "tsx scripts/backfillNbaImages.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

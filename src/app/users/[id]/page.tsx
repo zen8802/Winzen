@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { CoinIcon } from "@/components/CoinIcon";
@@ -6,6 +8,10 @@ import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { getLevelFromXp, getTitle } from "@/lib/gamification";
 import { Avatar } from "@/components/Avatar";
 import { getUserAvatarData } from "@/app/actions/agent";
+import { getFollowCounts, getFollowStatus } from "@/app/actions/social";
+import { getPortfolioSnapshots } from "@/app/actions/portfolio";
+import { FollowButton } from "@/components/FollowButton";
+import { PortfolioPnlChart } from "@/components/PortfolioPnlChart";
 
 async function getUserProfile(id: string) {
   const [user, createdMarkets, recentBets] = await Promise.all([
@@ -65,9 +71,15 @@ export default async function UserProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [{ user, createdMarkets, recentBets }, avatarData] = await Promise.all([
+  const session = await getServerSession(authOptions);
+  const isOwnProfile = session?.user?.id === id;
+
+  const [{ user, createdMarkets, recentBets }, avatarData, followCounts, isFollowing, portfolioSnapshots] = await Promise.all([
     getUserProfile(id),
     getUserAvatarData(id),
+    getFollowCounts(id),
+    !isOwnProfile && session?.user?.id ? getFollowStatus(id) : Promise.resolve(false),
+    getPortfolioSnapshots(id, "all"),
   ]);
   if (!user) notFound();
 
@@ -113,6 +125,22 @@ export default async function UserProfilePage({
               <p className="text-xl font-mono font-bold text-[var(--accent)]">{user.eloRating}</p>
               <p className="text-xs text-[var(--muted)]">ELO rating</p>
             </div>
+            {/* Follower counts + Follow button */}
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs text-[var(--muted)]">
+                <span className="font-semibold text-[var(--text)]">{followCounts.followers.toLocaleString()}</span> followers
+              </span>
+              <span className="text-xs text-[var(--muted)]">
+                <span className="font-semibold text-[var(--text)]">{followCounts.following.toLocaleString()}</span> following
+              </span>
+              {!isOwnProfile && session?.user?.id && (
+                <FollowButton
+                  followingId={id}
+                  initialIsFollowing={isFollowing}
+                  followerCount={followCounts.followers}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -147,6 +175,14 @@ export default async function UserProfilePage({
           </p>
         </section>
       </div>
+
+      {/* Portfolio PnL chart */}
+      {portfolioSnapshots.length > 0 && (
+        <section className="card">
+          <h2 className="mb-4 text-lg font-semibold">Portfolio Value</h2>
+          <PortfolioPnlChart snapshots={portfolioSnapshots} />
+        </section>
+      )}
 
       {/* Created markets */}
       {createdMarkets.length > 0 && (

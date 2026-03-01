@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useRef, useEffect } from "react";
 import { placeBet } from "@/app/actions/bets";
 import { useRouter } from "next/navigation";
-import { formatCoins } from "@/lib/coins";
 import { computeAmmProbability } from "@/lib/probability";
 import { CoinIcon } from "@/components/CoinIcon";
+import { CashOutButton } from "./CashOutButton";
 
 const QUICK_AMOUNTS = [100, 500, 1000];
 
@@ -33,6 +33,23 @@ export function PlaceBetForm({
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [optimisticBet, setOptimisticBet] = useState<{
+    id: string;
+    shares: number;
+    entryProbability: number;
+    outcomeLabel: string;
+    isYes: boolean;
+    amount: number;
+  } | null>(null);
+
+  // Clear the optimistic card as soon as the server refresh finishes
+  const prevPendingRef = useRef(false);
+  useEffect(() => {
+    if (prevPendingRef.current && !isPending) {
+      setOptimisticBet(null);
+    }
+    prevPendingRef.current = isPending;
+  }, [isPending]);
 
   const amountNum = parseInt(amount, 10) || 0;
   const validAmount = amountNum >= 1 && amountNum <= userBalance;
@@ -70,6 +87,9 @@ export function PlaceBetForm({
       setError(typeof result.error === "string" ? result.error : "Failed to place bet");
       return;
     }
+    if (result.bet) {
+      setOptimisticBet({ ...result.bet, amount: num });
+    }
     window.dispatchEvent(new CustomEvent("balance-updated"));
     setAmount("");
     // Non-blocking refresh — page stays interactive while server data updates
@@ -80,6 +100,54 @@ export function PlaceBetForm({
   const noProb = 100 - yesProb;
 
   return (
+    <>
+    {/* Optimistic position card — shown immediately after bet while server refreshes */}
+    {isPending && optimisticBet && (() => {
+      const currentProb = optimisticBet.entryProbability;
+      const currentValue = optimisticBet.shares * currentProb;
+      const pnl = currentValue - optimisticBet.amount;
+      const cashOutPayout = Math.floor(optimisticBet.shares * currentProb);
+      return (
+        <div className="space-y-2 border-t border-[var(--border)] pt-4">
+          <p className="text-sm font-medium text-[var(--muted)]">Your positions</p>
+          <ul className="space-y-2">
+            <li className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-white/[0.02] px-4 py-3">
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <p className="font-semibold" style={{ color: optimisticBet.isYes ? "#22c55e" : "#3b82f6" }}>
+                  {optimisticBet.outcomeLabel}
+                </p>
+                <p className="text-xs text-[var(--muted)]">
+                  Entry: {optimisticBet.entryProbability.toFixed(1)}% · {optimisticBet.shares.toFixed(3)} shares ·{" "}
+                  <span className="inline-flex items-center gap-0.5">
+                    <CoinIcon size={10} />{optimisticBet.amount.toLocaleString()}
+                  </span>
+                </p>
+                <p className="text-xs text-[var(--muted)]">
+                  Now: {currentProb.toFixed(1)}% · Value:{" "}
+                  <span className="inline-flex items-center gap-0.5">
+                    <CoinIcon size={10} />{currentValue.toFixed(0)}
+                  </span>
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span
+                  className="inline-flex items-center gap-1 font-mono text-sm font-bold"
+                  style={{ color: pnl >= 0 ? "#22c55e" : "#f97316" }}
+                >
+                  {pnl >= 0 ? "+" : ""}
+                  <CoinIcon size={13} />{pnl.toFixed(0)}
+                </span>
+                <CashOutButton
+                  betId={optimisticBet.id}
+                  payout={cashOutPayout}
+                  onSuccess={() => setOptimisticBet(null)}
+                />
+              </div>
+            </li>
+          </ul>
+        </div>
+      );
+    })()}
     <form onSubmit={handleSubmit} className="space-y-4 border-t border-[var(--border)] pt-4">
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-sm font-medium text-[var(--muted)]">
@@ -109,24 +177,24 @@ export function PlaceBetForm({
                 borderColor: isSelected
                   ? isYes
                     ? "#22c55e"
-                    : "#f97316"
+                    : "#3b82f6"
                   : "var(--border)",
                 backgroundColor: isSelected
                   ? isYes
                     ? "rgba(34,197,94,0.1)"
-                    : "rgba(249,115,22,0.1)"
+                    : "rgba(59,130,246,0.1)"
                   : "rgba(255,255,255,0.03)",
               }}
             >
               <span
                 className="text-xl font-extrabold"
-                style={{ color: isYes ? "#22c55e" : "#f97316" }}
+                style={{ color: isYes ? "#22c55e" : "#3b82f6" }}
               >
                 {prob.toFixed(1)}%
               </span>
               <span
                 className="mt-0.5 text-xs font-semibold"
-                style={{ color: isYes ? "rgba(34,197,94,0.6)" : "rgba(249,115,22,0.6)" }}
+                style={{ color: isYes ? "rgba(34,197,94,0.6)" : "rgba(59,130,246,0.6)" }}
               >
                 {(100 / prob).toFixed(2)}×
               </span>
@@ -187,7 +255,7 @@ export function PlaceBetForm({
               <span className="text-[var(--muted)]">Multiplier</span>
               <span
                 className="font-mono font-bold"
-                style={{ color: isYesSelected ? "#22c55e" : "#f97316" }}
+                style={{ color: isYesSelected ? "#22c55e" : "#3b82f6" }}
               >
                 {preview.multiplier.toFixed(2)}×
               </span>
@@ -243,5 +311,6 @@ export function PlaceBetForm({
         ) : "Place bet"}
       </button>
     </form>
+    </>
   );
 }

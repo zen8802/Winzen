@@ -12,7 +12,10 @@ import {
   ReferenceDot,
 } from "recharts";
 import { getMarketSnapshots } from "@/app/actions/charts";
-import type { SnapshotRow, BetPosition } from "@/app/actions/charts";
+import type { SnapshotRow, BetPosition, BetPositionEntry } from "@/app/actions/charts";
+import type { FollowedTrade } from "@/app/actions/social";
+import { baseUrl, LAYER_ORDER } from "@/lib/avatar";
+import type { AvatarEquipped, AvatarCategory } from "@/lib/avatar";
 
 // Matches src/lib/outcome-colors.ts palette exactly
 const COLORS = ["#22c55e", "#3b82f6", "#eab308", "#a855f7", "#f97316"];
@@ -43,6 +46,9 @@ type Props = {
   initialSnapshots: SnapshotRow[];
   userPosition: BetPosition;
   marketClosed: boolean;
+  userEquipped?: AvatarEquipped;
+  userName?: string;
+  followedTrades?: FollowedTrade[];
 };
 
 // Extracted tooltip so Recharts gets a stable component reference
@@ -78,14 +84,85 @@ const ChartTooltip = memo(function ChartTooltip({
   );
 });
 
+// ─── Avatar chip rendered inside SVG via shape prop ─────────────────────────
+
+type HoveredEntry = { kind: "own"; i: number; cx: number; cy: number }
+                  | { kind: "followed"; i: number; cx: number; cy: number };
+
+function AvatarChip({
+  cx,
+  cy,
+  r = 14,
+  equipped,
+  borderColor,
+  clipId,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  cx: number;
+  cy: number;
+  r?: number;
+  equipped: AvatarEquipped;
+  borderColor: string;
+  clipId: string;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+}) {
+  return (
+    <g>
+      <defs>
+        <clipPath id={clipId}>
+          <circle cx={cx} cy={cy} r={r} />
+        </clipPath>
+      </defs>
+      {/* Base avatar */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <image
+        href={baseUrl()}
+        x={cx - r} y={cy - r}
+        width={r * 2} height={r * 2}
+        clipPath={`url(#${clipId})`}
+      />
+      {/* Equipped layers */}
+      {LAYER_ORDER
+        .filter((layer) => layer !== "base" && equipped[layer as AvatarCategory])
+        .map((layer) => (
+          <image
+            key={layer}
+            href={equipped[layer as AvatarCategory]!}
+            x={cx - r} y={cy - r}
+            width={r * 2} height={r * 2}
+            clipPath={`url(#${clipId})`}
+          />
+        ))
+      }
+      {/* Border ring */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={borderColor} strokeWidth={2} />
+      {/* Invisible hover target */}
+      <circle
+        cx={cx} cy={cy} r={r}
+        fill="transparent"
+        style={{ cursor: "pointer" }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      />
+    </g>
+  );
+}
+
 export function ProbabilityChart({
   marketId,
   outcomes,
   initialSnapshots,
   userPosition,
   marketClosed,
+  userEquipped = {},
+  userName,
+  followedTrades = [],
 }: Props) {
   const [snapshots, setSnapshots] = useState<SnapshotRow[]>(initialSnapshots);
+  const [showFollowed, setShowFollowed] = useState(false);
+  const [hovered, setHovered] = useState<HoveredEntry | null>(null);
 
   const fetchSnapshots = useCallback(async () => {
     const fresh = await getMarketSnapshots(marketId);
@@ -123,21 +200,38 @@ export function ProbabilityChart({
     });
   }, [chartData, outcomes]);
 
-  // Pre-parse entry timestamp once; reduce no longer parses dates inside the loop
-  const entryPoint = useMemo(() => {
-    if (!userPosition || chartData.length === 0) return null;
-    const entryTs = new Date(userPosition.entryTimestamp).getTime();
-    return chartData.reduce((best, point) => {
-      const diff = Math.abs(new Date(point.time).getTime() - entryTs);
-      const bestDiff = Math.abs(new Date(best.time).getTime() - entryTs);
-      return diff < bestDiff ? point : best;
-    }, chartData[0]);
-  }, [userPosition, chartData]);
+  // Resolve each own entry position to the nearest chart point
+  const entryPoints = useMemo(() => {
+    if (!userPosition || chartData.length === 0) return [];
+    return userPosition
+      .map((pos: BetPositionEntry) => {
+        const entryTs = new Date(pos.entryTimestamp).getTime();
+        const closestPoint = chartData.reduce((best, point) => {
+          const diff    = Math.abs(new Date(point.time).getTime() - entryTs);
+          const bestDiff = Math.abs(new Date(best.time).getTime() - entryTs);
+          return diff < bestDiff ? point : best;
+        }, chartData[0]);
+        const outcomeIndex = outcomes.findIndex((o) => o.id === pos.outcomeId);
+        return { closestPoint, pos, outcomeIndex };
+      })
+      .filter((ep) => ep.outcomeIndex >= 0);
+  }, [userPosition, chartData, outcomes]);
 
-  const userOutcomeIndex = useMemo(
-    () => (userPosition ? outcomes.findIndex((o) => o.id === userPosition.outcomeId) : -1),
-    [userPosition, outcomes]
-  );
+  // Resolve followed trade entry points
+  const followedEntryPoints = useMemo(() => {
+    if (!followedTrades.length || chartData.length === 0) return [];
+    return followedTrades.map((trade) => {
+      const entryTs = new Date(trade.entryTimestamp).getTime();
+      const closestPoint = chartData.reduce((best, point) => {
+        const diff     = Math.abs(new Date(point.time).getTime() - entryTs);
+        const bestDiff = Math.abs(new Date(best.time).getTime() - entryTs);
+        return diff < bestDiff ? point : best;
+      }, chartData[0]);
+      const outcomeIndex = outcomes.findIndex((o) => o.id === trade.outcomeId);
+      const outcomeLabel = outcomes.find((o) => o.id === trade.outcomeId)?.label ?? "?";
+      return { closestPoint, trade, outcomeIndex: Math.max(0, outcomeIndex), outcomeLabel };
+    });
+  }, [followedTrades, chartData, outcomes]);
 
   // Stable tooltip renderer — outcomes ref doesn't change between polls
   const renderTooltip = useCallback(
@@ -168,17 +262,33 @@ export function ProbabilityChart({
         </p>
       )}
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3">
-        {outcomes.map((o, i) => (
-          <div key={o.id} className="flex items-center gap-1.5">
-            <span
-              className="inline-block h-2 w-4 rounded-full"
-              style={{ backgroundColor: getColor(i) }}
-            />
-            <span className="text-xs text-[var(--muted)]">{o.label}</span>
-          </div>
-        ))}
+      {/* Top row: legend + followed trades toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-3">
+          {outcomes.map((o, i) => (
+            <div key={o.id} className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-2 w-4 rounded-full"
+                style={{ backgroundColor: getColor(i) }}
+              />
+              <span className="text-xs text-[var(--muted)]">{o.label}</span>
+            </div>
+          ))}
+        </div>
+        {followedTrades.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowFollowed((v) => !v)}
+            className={[
+              "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+              showFollowed
+                ? "bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40"
+                : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]",
+            ].join(" ")}
+          >
+            {showFollowed ? "Hide trades" : `Show trades (${followedTrades.length})`}
+          </button>
+        )}
       </div>
 
       <ResponsiveContainer width="100%" height={220}>
@@ -215,22 +325,127 @@ export function ProbabilityChart({
               isAnimationActive={false}
             />
           ))}
-          {userPosition && entryPoint && userOutcomeIndex >= 0 && (
+
+          {/* Own entry avatar chips */}
+          {entryPoints.map((ep, i) => (
             <ReferenceDot
-              x={entryPoint.time}
-              y={Math.round(userPosition.entryProbability)}
-              r={5}
-              fill={getColor(userOutcomeIndex)}
-              stroke="#0c0f14"
-              strokeWidth={2}
-              label={{
-                value: `You: ${Math.round(userPosition.entryProbability)}%`,
-                position: "top",
-                fontSize: 10,
-                fill: "#8b9cb3",
+              key={`own-${i}`}
+              x={ep.closestPoint.time}
+              y={Math.round(ep.pos.entryProbability)}
+              r={14}
+              fill="transparent"
+              stroke="none"
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              shape={(shapeProps: any) => {
+                const cx = shapeProps.cx as number;
+                const cy = shapeProps.cy as number;
+                if (cx === undefined || cy === undefined) return <g />;
+                return (
+                  <g key={`own-chip-${i}`}>
+                    <AvatarChip
+                      cx={cx}
+                      cy={cy}
+                      equipped={userEquipped}
+                      borderColor={getColor(ep.outcomeIndex)}
+                      clipId={`clip-own-${i}`}
+                      onMouseEnter={() => setHovered({ kind: "own", i, cx, cy })}
+                      onMouseLeave={() => setHovered(null)}
+                    />
+                    {hovered?.kind === "own" && hovered.i === i && (
+                      <foreignObject
+                        x={cx - 65}
+                        y={cy - 46}
+                        width={130}
+                        height={34}
+                        style={{ overflow: "visible" }}
+                      >
+                        <div
+                          // @ts-expect-error xmlns needed for SVG foreignObject
+                          xmlns="http://www.w3.org/1999/xhtml"
+                          style={{
+                            background: "var(--surface)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 8,
+                            padding: "4px 10px",
+                            fontSize: 11,
+                            textAlign: "center",
+                            whiteSpace: "nowrap",
+                            color: "var(--text)",
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                          }}
+                        >
+                          {userName ?? "You"}: {Math.round(ep.pos.entryProbability)}%
+                        </div>
+                      </foreignObject>
+                    )}
+                  </g>
+                );
               }}
             />
-          )}
+          ))}
+
+          {/* Followed users' trade entry chips */}
+          {showFollowed &&
+            followedEntryPoints.map((fep, i) => (
+              <ReferenceDot
+                key={`followed-${i}`}
+                x={fep.closestPoint.time}
+                y={Math.round(fep.trade.entryProbability)}
+                r={14}
+                fill="transparent"
+                stroke="none"
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                shape={(shapeProps: any) => {
+                  const cx = shapeProps.cx as number;
+                  const cy = shapeProps.cy as number;
+                  if (cx === undefined || cy === undefined) return <g />;
+                  return (
+                    <g key={`followed-chip-${i}`}>
+                      <AvatarChip
+                        cx={cx}
+                        cy={cy}
+                        equipped={fep.trade.equipped}
+                        borderColor={getColor(fep.outcomeIndex)}
+                        clipId={`clip-followed-${i}`}
+                        onMouseEnter={() => setHovered({ kind: "followed", i, cx, cy })}
+                        onMouseLeave={() => setHovered(null)}
+                      />
+                      {hovered?.kind === "followed" && hovered.i === i && (
+                        <foreignObject
+                          x={cx - 80}
+                          y={cy - 62}
+                          width={160}
+                          height={50}
+                          style={{ overflow: "visible" }}
+                        >
+                          <div
+                            // @ts-expect-error xmlns needed for SVG foreignObject
+                            xmlns="http://www.w3.org/1999/xhtml"
+                            style={{
+                              background: "var(--surface)",
+                              border: "1px solid var(--border)",
+                              borderRadius: 8,
+                              padding: "6px 10px",
+                              fontSize: 11,
+                              textAlign: "center",
+                              whiteSpace: "nowrap",
+                              color: "var(--text)",
+                              boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            <div style={{ fontWeight: 600 }}>{fep.trade.username}</div>
+                            <div style={{ color: "var(--muted)" }}>
+                              {fep.outcomeLabel} · {Math.round(fep.trade.entryProbability)}% · {fep.trade.amount.toLocaleString()} coins
+                            </div>
+                          </div>
+                        </foreignObject>
+                      )}
+                    </g>
+                  );
+                }}
+              />
+            ))}
         </LineChart>
       </ResponsiveContainer>
     </div>

@@ -89,6 +89,7 @@ export async function placeBet(formData: FormData) {
   const isNewParticipant = existingBets.length === 0;
 
   const snapshotNow = new Date();
+  let createdBetId = "";
 
   // ─── XP ───────────────────────────────────────────────────────────────────
   const xpGained = getXpForAction("place_bet");
@@ -157,7 +158,7 @@ export async function placeBet(formData: FormData) {
       data: { balance: finalBalance, xp: finalXp, level: finalLevel, totalTrades: { increment: 1 } },
     });
 
-    await tx.bet.create({
+    const createdBet = await tx.bet.create({
       data: {
         userId: session.user.id,
         marketId,
@@ -167,6 +168,7 @@ export async function placeBet(formData: FormData) {
         shares,
       },
     });
+    createdBetId = createdBet.id;
 
     await tx.market.update({
       where: { id: marketId },
@@ -274,7 +276,17 @@ export async function placeBet(formData: FormData) {
   revalidatePath("/markets");
   revalidatePath(`/markets/${marketId}`);
   revalidatePath("/portfolio");
-  return { ok: true, missionRewards: missionCoinRewards };
+  return {
+    ok: true,
+    missionRewards: missionCoinRewards,
+    bet: {
+      id: createdBetId,
+      shares,
+      entryProbability,
+      outcomeLabel: chosenOutcome.label,
+      isYes,
+    },
+  };
 }
 
 // ─── Cash Out (early exit) ────────────────────────────────────────────────────

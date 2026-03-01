@@ -40,6 +40,7 @@ export function Header() {
     status === "authenticated" ? (
       <>
         <Link href="/leaderboard" className="btn-ghost text-sm" onClick={close}>Leaderboard</Link>
+        <Link href="/following" className="btn-ghost text-sm" onClick={close}>Following</Link>
         <Link href="/agent" className="btn-ghost text-sm" onClick={close}>My Agent</Link>
         <Link href="/portfolio" className="btn-ghost text-sm" onClick={close}>Portfolio</Link>
         <Link href="/markets/new" className="btn-ghost text-sm" onClick={close}>Create</Link>

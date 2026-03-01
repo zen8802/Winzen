@@ -7,9 +7,11 @@ import { cashOut } from "@/app/actions/bets";
 export function CashOutButton({
   betId,
   payout,
+  onSuccess,
 }: {
   betId: string;
   payout: number;
+  onSuccess?: () => void;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -33,6 +35,7 @@ export function CashOutButton({
       return;
     }
     window.dispatchEvent(new CustomEvent("balance-updated"));
+    onSuccess?.();
     router.refresh();
   }
 
