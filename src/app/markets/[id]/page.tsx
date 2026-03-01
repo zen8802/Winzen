@@ -10,6 +10,7 @@ import { CountdownTimer } from "@/components/CountdownTimer";
 import { MarketComments } from "@/components/MarketComments";
 import { getMarketSnapshots, getUserBetPosition } from "@/app/actions/charts";
 import { getComments } from "@/app/actions/comments";
+import { getUserAvatarData } from "@/app/actions/agent";
 import { CoinIcon } from "@/components/CoinIcon";
 import { MarketImage } from "@/components/MarketImage";
 import Link from "next/link";
@@ -103,11 +104,12 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
     userBalance = u?.balance ?? 0;
   }
 
-  const [initialSnapshots, userPosition, initialComments, delta24h] = await Promise.all([
+  const [initialSnapshots, userPosition, initialComments, delta24h, currentUserAvatar] = await Promise.all([
     getMarketSnapshots(id),
     session?.user?.id ? getUserBetPosition(id, session.user.id) : Promise.resolve(null),
     getComments(id),
     get24hDelta(market),
+    session?.user?.id ? getUserAvatarData(session.user.id) : Promise.resolve(null),
   ]);
 
   return (
@@ -267,6 +269,8 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           marketId={market.id}
           initialComments={initialComments}
           isSignedIn={!!session?.user?.id}
+          currentUserName={session?.user?.name ?? undefined}
+          currentUserEquipped={currentUserAvatar?.equipped}
         />
       </section>
     </div>

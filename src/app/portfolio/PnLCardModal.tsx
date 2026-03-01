@@ -137,7 +137,7 @@ export function PnLCardModal({
       {/* Trigger button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="btn-primary flex items-center gap-2 text-sm"
+        className="btn-gradient flex items-center gap-2 text-sm"
       >
         Share PnL Card
       </button>
@@ -297,7 +297,7 @@ export function PnLCardModal({
               <button
                 onClick={handleDownload}
                 disabled={isWorking}
-                className="btn-primary flex items-center gap-2 text-sm"
+                className="btn-gradient flex items-center gap-2 text-sm"
               >
                 {isWorking ? "Generating…" : "↓ Download PNG"}
               </button>

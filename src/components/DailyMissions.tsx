@@ -85,12 +85,10 @@ export function DailyMissions() {
 
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    mission.completed ? "" : "bg-[var(--accent)]"
-                  }`}
+                  className="h-full rounded-full transition-all duration-500"
                   style={{
                     width: `${pct}%`,
-                    ...(mission.completed ? { background: "linear-gradient(135deg, #f472b6, #a78bfa)" } : {}),
+                    background: "linear-gradient(135deg, #f472b6, #a78bfa)",
                   }}
                 />
               </div>

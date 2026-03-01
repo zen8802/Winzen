@@ -36,8 +36,11 @@ export function getXpProgressInTier(xp: number, xpPerTier = BP_XP_PER_TIER): num
 
 // ─── Milestone helpers ─────────────────────────────────────────────────────────
 
-export function isHalfway(tier: number, totalTiers = BP_TOTAL_TIERS): boolean {
-  return tier >= Math.ceil(totalTiers / 2);
+/** Tier at which the mid-season XP boost activates for both tracks. */
+export const BP_BOOST_TIER = 10;
+
+export function isHalfway(tier: number): boolean {
+  return tier >= BP_BOOST_TIER;
 }
 export function isSeasonComplete(tier: number, totalTiers = BP_TOTAL_TIERS): boolean {
   return tier >= totalTiers;
@@ -56,7 +59,7 @@ export function getBpXpMultiplier(
   totalTiers = BP_TOTAL_TIERS,
 ): number {
   if (isSeasonComplete(tier, totalTiers)) return isPremium ? 1.25 : 1.12;
-  if (isHalfway(tier, totalTiers))        return isPremium ? 1.10 : 1.05;
+  if (isHalfway(tier))                    return isPremium ? 1.10 : 1.05;
   return 1.0;
 }
 

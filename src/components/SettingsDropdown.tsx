@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
+import Link from "next/link";
 import {
   getUserSettings,
   updateUserSettings,
@@ -128,6 +129,22 @@ export function SettingsDropdown() {
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* History links — only when signed in */}
+          {status === "authenticated" && (
+            <div className="border-b border-[var(--border)] px-4 py-3">
+              <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                History
+              </p>
+              <Link
+                href="/resolved-bets"
+                onClick={() => setIsOpen(false)}
+                className="text-sm text-[var(--text)] transition hover:text-[var(--accent)]"
+              >
+                Resolved Bets
+              </Link>
             </div>
           )}
 

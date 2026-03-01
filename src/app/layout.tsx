@@ -6,6 +6,7 @@ import { Providers } from "./providers";
 import { Header } from "@/components/Header";
 import { Subheader } from "@/components/Subheader";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { Footer } from "@/components/Footer";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -42,6 +43,7 @@ export default function RootLayout({
             <Subheader />
           </Suspense>
           <main className="mx-auto max-w-4xl px-4 py-8">{children}</main>
+          <Footer />
           <ActivityFeed />
         </Providers>
       </body>

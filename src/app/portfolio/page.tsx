@@ -28,7 +28,7 @@ const TX_LABELS: Record<string, string> = {
 };
 
 async function getPortfolio(userId: string) {
-  const [user, activeBets, closedBets, transactions, snapshots] = await Promise.all([
+  const [user, activeBets, closedBets, resolvedBets, transactions, snapshots] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -56,6 +56,7 @@ async function getPortfolio(userId: string) {
             id: true,
             title: true,
             resolvedOutcomeId: true,
+            resolvedAt: true,
             currentProbability: true,
           },
         },
@@ -72,6 +73,16 @@ async function getPortfolio(userId: string) {
         outcome: { select: { label: true } },
       },
     }),
+    // All resolved bets — no take limit, used for accurate Realized PnL
+    prisma.bet.findMany({
+      where: { userId, closedAt: null, market: { resolvedOutcomeId: { not: null } } },
+      select: {
+        amount: true,
+        shares: true,
+        outcomeId: true,
+        market: { select: { resolvedOutcomeId: true } },
+      },
+    }),
     prisma.transaction.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -79,14 +90,14 @@ async function getPortfolio(userId: string) {
     }),
     getPortfolioSnapshots(userId, "all"),
   ]);
-  return { user, activeBets, closedBets, transactions, snapshots };
+  return { user, activeBets, closedBets, resolvedBets, transactions, snapshots };
 }
 
 export default async function PortfolioPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const { user, activeBets, closedBets, transactions, snapshots } = await getPortfolio(
+  const { user, activeBets, closedBets, resolvedBets, transactions, snapshots } = await getPortfolio(
     session.user.id,
   );
   if (!user) redirect("/login");
@@ -96,9 +107,15 @@ export default async function PortfolioPage() {
   const currentLevelXp = xpForPrevLevel(level);
   const nextLevelXp = xpForLevel(level);
 
-  // Separate active (market open) vs pending settlement (market resolved, bet won)
-  const openPositions = activeBets.filter((b) => !b.market.resolvedOutcomeId);
-  const pendingPositions = activeBets.filter((b) => !!b.market.resolvedOutcomeId);
+  // Bets resolved within the last hour stay visible; older ones move to /resolved-bets
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const openPositions    = activeBets.filter((b) => !b.market.resolvedOutcomeId);
+  const pendingPositions = activeBets.filter(
+    (b) =>
+      !!b.market.resolvedOutcomeId &&
+      b.market.resolvedAt !== null &&
+      b.market.resolvedAt > oneHourAgo,
+  );
 
   // Compute unrealized PnL for open positions
   const unrealizedPnl = openPositions.reduce((sum, bet) => {
@@ -110,13 +127,19 @@ export default async function PortfolioPage() {
     return sum + (shares * currentProb - bet.amount);
   }, 0);
 
-  // Realized PnL: sum of (cashout payout - amount) for closed bets
-  const realizedPnl = closedBets.reduce((sum, bet) => {
+  // Realized PnL = cashout PnL + resolution PnL
+  const cashoutPnl = closedBets.reduce((sum, bet) => {
     if (!bet.exitProbability) return sum;
     const shares = bet.shares ?? bet.amount / 50;
-    const cashoutValue = shares * bet.exitProbability;
-    return sum + (cashoutValue - bet.amount);
+    return sum + (shares * bet.exitProbability - bet.amount);
   }, 0);
+  const resolutionPnl = resolvedBets.reduce((sum, bet) => {
+    const won = bet.market.resolvedOutcomeId === bet.outcomeId;
+    const shares = bet.shares ?? bet.amount / 50;
+    const payout = won ? Math.floor(shares * 100) : 0;
+    return sum + (payout - bet.amount);
+  }, 0);
+  const realizedPnl = cashoutPnl + resolutionPnl;
 
   return (
     <div className="space-y-8">
@@ -260,7 +283,12 @@ export default async function PortfolioPage() {
       {/* Pending Settlement */}
       {pendingPositions.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-semibold">Pending Settlement</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Pending Settlement</h2>
+            <Link href="/resolved-bets" className="text-xs text-[var(--muted)] hover:text-[var(--accent)]">
+              View all resolved →
+            </Link>
+          </div>
           <ul className="space-y-2">
             {pendingPositions.map((bet) => {
               const won = bet.market.resolvedOutcomeId === bet.outcomeId;

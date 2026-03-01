@@ -338,7 +338,7 @@ export async function resolveMarket(formData: FormData) {
   // ─── Mark market resolved ─────────────────────────────────────────────────
   await prisma.market.update({
     where: { id: marketId },
-    data: { resolvedOutcomeId: outcomeId },
+    data: { resolvedOutcomeId: outcomeId, resolvedAt: new Date() },
   });
 
   // ─── Process each user ───────────────────────────────────────────────────

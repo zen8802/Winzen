@@ -45,8 +45,8 @@ const rewards: RewardDef[] = [];
 
 for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
   // ── Free track ──────────────────────────────────────────────────
-  if (tier === 15) {
-    // Halfway XP boost marker (auto-applied in code, +5% free / +10% premium)
+  if (tier === 10) {
+    // Mid-season XP boost marker (auto-applied in code, +5% free / +10% premium)
     rewards.push({ tier, track: "FREE", rewardType: "XP_BOOST_MARKER", label: "+5% XP Boost" });
   } else if (tier === 30) {
     rewards.push({ tier, track: "FREE", rewardType: "XP_BOOST_MARKER", label: "+12% XP Boost · Season Complete!" });
@@ -55,8 +55,10 @@ for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
   }
 
   // ── Premium track ───────────────────────────────────────────────
-  if (tier === 10) {
+  if (tier === 5) {
     rewards.push({ tier, track: "PREMIUM", rewardType: "CHOICE_COSMETIC", itemSlot: "hat",    label: "Free Hat of the Season" });
+  } else if (tier === 10) {
+    rewards.push({ tier, track: "PREMIUM", rewardType: "XP_BOOST_MARKER", label: "+10% EXP BOOST" });
   } else if (tier === 15) {
     rewards.push({ tier, track: "PREMIUM", rewardType: "CHOICE_COSMETIC", itemSlot: "top",    label: "Free Shirt of the Season" });
   } else if (tier === 20) {
@@ -64,7 +66,7 @@ for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
   } else if (tier === 25) {
     rewards.push({ tier, track: "PREMIUM", rewardType: "CHOICE_COSMETIC", itemSlot: "shoes",  label: "Free Shoes of the Season" });
   } else if (tier === 30) {
-    rewards.push({ tier, track: "PREMIUM", rewardType: "COINS", amount: 5000, label: "Season Complete Bonus!" });
+    rewards.push({ tier, track: "PREMIUM", rewardType: "XP_BOOST_MARKER", label: "+25% EXP BOOST · Season Complete!" });
   } else {
     rewards.push({ tier, track: "PREMIUM", rewardType: "COINS", amount: premCoins(tier) });
   }

@@ -117,6 +117,7 @@ model Market {
   totalVolume        Int       @default(0) // sum of all bet amounts
   participantCount   Int       @default(0) // unique users who placed at least one bet
   resolvedOutcomeId  String?   // set when market is resolved
+  resolvedAt         DateTime? // timestamp of resolution — used to archive bets after 1 hour
   currentProbability Float     @default(50) // 1–99, probability of YES outcome (AMM price)
   liquidity          Int       @default(1000) // AMM liquidity parameter; 100-coin bet moves price ~10%
   closesAt           DateTime
@@ -216,12 +217,16 @@ model Comment {
   userId    String
   username  String   // denormalized — user's display name at time of posting
   content   String   // max 300 chars enforced in application layer
+  parentId  String?  // null = top-level comment; set = reply to that comment
   createdAt DateTime @default(now())
 
-  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market  Market    @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("Replies")
 
   @@index([marketId, createdAt])
+  @@index([parentId])
 }
 
 model Notification {

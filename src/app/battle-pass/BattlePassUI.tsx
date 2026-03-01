@@ -10,7 +10,7 @@ import {
   type BpStatus,
   type BpRewardRow,
 } from "@/app/actions/battle-pass";
-import { PREMIUM_PURPLE } from "@/lib/battle-pass";
+import { PREMIUM_PURPLE, BP_BOOST_TIER } from "@/lib/battle-pass";
 import { CoinIcon } from "@/components/CoinIcon";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -291,7 +291,6 @@ export function BattlePassUI({ initial }: { initial: BpStatus }) {
   }
 
   const xpPct = Math.round((user.xpInTier / user.xpPerTier) * 100);
-  const halfway = Math.ceil(season.totalTiers / 2);
 
   return (
     <>
@@ -370,11 +369,11 @@ export function BattlePassUI({ initial }: { initial: BpStatus }) {
             <span>
               {user.isPremium
                 ? user.tier >= season.totalTiers ? "+25% XP Boost Active"
-                  : user.tier >= halfway          ? "+10% XP Boost Active"
-                  : `+10% boost unlocks at tier ${halfway}`
+                  : user.tier >= BP_BOOST_TIER    ? "+10% XP Boost Active"
+                  : `+10% boost unlocks at tier ${BP_BOOST_TIER}`
                 : user.tier >= season.totalTiers ? "+12% XP Boost Active"
-                  : user.tier >= halfway          ? "+5% XP Boost Active"
-                  : `+5% boost unlocks at tier ${halfway}`}
+                  : user.tier >= BP_BOOST_TIER    ? "+5% XP Boost Active"
+                  : `+5% boost unlocks at tier ${BP_BOOST_TIER}`}
             </span>
             <span>
               {season.totalTiers * season.xpPerTier - user.xp} XP to completion

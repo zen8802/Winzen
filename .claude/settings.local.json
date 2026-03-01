@@ -7,7 +7,14 @@
       "Bash(npx tsc --noEmit)",
       "Bash(echo \"Exit: $?\")",
       "Bash(npx prisma generate)",
-      "Bash(npx prisma:*)"
+      "Bash(npx prisma:*)",
+      "Bash(npm run db:push)",
+      "Bash(grep -n \"MarketComments\\\\|getUserAvatarData\\\\|import\" c:/dev/Winzen/src/app/markets/[id]/page.tsx)",
+      "Bash(xargs grep -l -i \"share\\\\|pnl\")",
+      "Bash(xargs grep -l \"battle.pass\\\\|battlepass\\\\|BattlePass\\\\|tier\\\\|Tier\")",
+      "Bash(npx tsx prisma/seed-battle-pass.ts)",
+      "Bash(npx tsx -e \":*)",
+      "Bash(npx tsx prisma/patch-bp-tiers.ts)"
     ]
   }
 }
